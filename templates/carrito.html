@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Carrito - RM KITS</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <div class="top-bar">
+    <div class="logo">
+      <img src="/static/img/logo.png" alt="RM KITS Logo">
+    </div>
+    <div class="brand-name">RM KITS</div>
+    <div style="margin-left:auto">
+      <a href="/" class="volver">← Seguir comprando</a>
+    </div>
+  </div>
+
+  <section class="info-section">
+    <p><strong>Compras mayoristas RM KITS:</strong> solo permitimos compras a partir de <strong>$200.000</strong>. Hacemos envíos a todo el país.</p>
+  </section>
+
+  <main class="cart-container">
+    <h2>Tu carrito</h2>
+
+    <div id="lista-carrito"></div>
+
+    <div class="resumen">
+      <div>Total: <span id="total">$0</span></div>
+      <div id="alerta" class="alerta" style="display:none; color:#b71c1c; margin-top:6px;">
+        El pedido debe ser de al menos $200.000 para poder enviarlo.
+      </div>
+    </div>
+
+    <section class="checkout-section">
+      <h3>Entrega</h3>
+      <div class="entrega-opciones">
+        <label class="radio"><input type="radio" name="entrega" value="retiro" checked> Retira en el local (Av. Rivadavia 2768, CABA)</label>
+        <label class="radio"><input type="radio" name="entrega" value="envio"> Con envío (a cargo del comprador)</label>
+      </div>
+
+      <div id="envio-form" class="envio-form" style="display:none;">
+        <div class="form-row"><label>Dirección *</label><input type="text" id="envio-direccion" placeholder="Calle y número"></div>
+        <div class="form-row"><label>Localidad *</label><input type="text" id="envio-localidad" placeholder="Ej: La Plata"></div>
+        <div class="form-row"><label>Provincia *</label><input type="text" id="envio-provincia" placeholder="Ej: Buenos Aires"></div>
+        <div class="form-row"><label>Código Postal *</label><input type="text" id="envio-cp" placeholder="Ej: 1900"></div>
+        <div class="form-row"><label>Referencias</label><input type="text" id="envio-referencias" placeholder="Opcional"></div>
+      </div>
+    </section>
+
+    <section class="checkout-section">
+      <h3>Datos de contacto</h3>
+      <div class="form-row"><label>Nombre completo *</label><input type="text" id="contacto-nombre" placeholder="Nombre y apellido"></div>
+      <div class="form-row"><label>Email *</label><input type="email" id="contacto-email" placeholder="tu@email.com"></div>
+    </section>
+
+    <div class="checkout-actions">
+      <button id="enviar-whatsapp-btn">Enviar pedido por WhatsApp</button>
+    </div>
+  </main>
+
+  <!-- SweetAlert2 -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <style>.swal2-popup{border-radius:14px!important}</style>
+
+  <script>
+    // Helpers de alertas
+    function alertBox({title="", text="", icon="info", confirmText="Aceptar"} = {}) {
+      return Swal.fire({ title, text, icon, confirmButtonText: confirmText, confirmButtonColor:"#6a1b9a" });
+    }
+    function toast(title, icon="success") {
+      return Swal.fire({ toast:true, position:"top-end", showConfirmButton:false, timer:2000, timerProgressBar:true, title, icon });
+    }
+
+    const STORAGE_KEY = "rmkits_carrito";
+    const WHATSAPP_NUMERO = "1158573906"; // tu número (sin +, sin 0, sin guiones)
+    let carrito = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+
+    // --- Migración defensiva: asegurar multiplo y minimo en todos los ítems ---
+    let huboMigracion = false;
+    carrito = carrito.map(p => {
+      const nuevo = { ...p };
+      if (nuevo.multiplo == null || isNaN(parseInt(nuevo.multiplo,10))) { nuevo.multiplo = 1; huboMigracion = true; }
+      if (nuevo.minimo  == null || isNaN(parseInt(nuevo.minimo ,10))) { nuevo.minimo  = 1; huboMigracion = true; }
+      nuevo.multiplo = parseInt(nuevo.multiplo,10);
+      nuevo.minimo  = parseInt(nuevo.minimo,10);
+      return nuevo;
+    });
+    if (huboMigracion) localStorage.setItem(STORAGE_KEY, JSON.stringify(carrito));
+
+    function formatearMoneda(n) { return `$${n.toLocaleString("es-AR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`; }
+    function calcularTotal() { return carrito.reduce((sum, p) => sum + p.precio * p.cantidad, 0); }
+    function guardar() { localStorage.setItem(STORAGE_KEY, JSON.stringify(carrito)); }
+
+    // Ajusta a un valor válido (>= min) y múltiplo de 'step'
+    function ajustarCantidad(valor, min, step) {
+      let v = parseInt(valor, 10);
+      if (isNaN(v)) v = min;
+      if (v < min) v = min;
+      step = Math.max(1, parseInt(step,10) || 1);
+      // llevar al múltiplo más cercano hacia ARRIBA (para no quedar por debajo del min ni perder unidades)
+      if (step > 1 && v % step !== 0) v = Math.ceil(v / step) * step;
+      if (v < min) v = min;
+      return v;
+    }
+
+    function renderCarrito() {
+      const cont = document.getElementById("lista-carrito");
+      cont.innerHTML = "";
+      if (carrito.length === 0) cont.innerHTML = "<p>El carrito está vacío.</p>";
+
+      carrito.forEach((p, idx) => {
+        const step = p.multiplo || 1;
+        const min  = p.minimo || step || 1;
+
+        const fila = document.createElement("div");
+        fila.className = "cart-item";
+        fila.innerHTML = `
+          <div class="info">
+            <div><strong>${p.titulo}</strong> (${p.codigo})</div>
+            <div>Precio unitario: ${formatearMoneda(p.precio)}</div>
+            <div>
+              Cantidad:
+              <input type="number"
+                     min="${min}"
+                     step="${step}"
+                     value="${p.cantidad}"
+                     data-idx="${idx}"
+                     class="cantidad-input">
+              <button data-idx="${idx}" class="quitar-btn">Eliminar</button>
+            </div>
+          </div>
+          <div class="subtotal">Subtotal: ${formatearMoneda(p.precio * p.cantidad)}</div>
+        `;
+        cont.appendChild(fila);
+      });
+
+      document.getElementById("total").textContent = formatearMoneda(calcularTotal());
+      const alerta = document.getElementById("alerta");
+      alerta.style.display = calcularTotal() < 200000 ? "block" : "none";
+
+      // Cambios de cantidad (se dispara al usar flechas o al salir del input)
+      document.querySelectorAll(".cantidad-input").forEach(input => {
+        input.addEventListener("change", e => {
+          const idx = parseInt(e.target.dataset.idx, 10);
+          const step = carrito[idx].multiplo || 1;
+          const min  = carrito[idx].minimo  || step || 1;
+
+          const nueva = ajustarCantidad(e.target.value, min, step);
+          carrito[idx].cantidad = nueva;
+
+          guardar();
+          renderCarrito();           // re-render para actualizar subtotal y mantener step/min correctos
+          toast("Cantidad actualizada", "info");
+        });
+      });
+
+      // Quitar producto (confirm)
+      document.querySelectorAll(".quitar-btn").forEach(btn => {
+        btn.addEventListener("click", async e => {
+          const idx = parseInt(e.target.dataset.idx, 10);
+          const res = await Swal.fire({
+            title:"Eliminar producto",
+            text:"¿Querés quitar este producto del carrito?",
+            icon:"question",
+            showCancelButton:true,
+            confirmButtonText:"Quitar",
+            cancelButtonText:"Cancelar",
+            confirmButtonColor:"#6a1b9a",
+            cancelButtonColor:"#9e9e9e"
+          });
+          if (res.isConfirmed) {
+            carrito.splice(idx, 1);
+            guardar();
+            renderCarrito();
+            toast("Producto eliminado", "info");
+          }
+        });
+      });
+    }
+
+    function emailValido(email) {
+      const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      return re.test(String(email).toLowerCase());
+    }
+    function obtenerEntregaSeleccionada() {
+      const r = document.querySelector('input[name="entrega"]:checked');
+      return r ? r.value : "retiro";
+    }
+
+    function validarFormulario() {
+      const total = calcularTotal();
+      if (total < 200000) {
+        alertBox({ icon:"warning", title:"Pedido mínimo", text:"El pedido debe ser de al menos $200.000 para enviarse." });
+        return false;
+      }
+      const nombre = document.getElementById("contacto-nombre").value.trim();
+      const email = document.getElementById("contacto-email").value.trim();
+      if (!nombre) { alertBox({ icon:"error", title:"Falta información", text:"Ingresá tu nombre completo." }); return false; }
+      if (!email || !emailValido(email)) { alertBox({ icon:"error", title:"Email inválido", text:"Revisá el formato de tu email." }); return false; }
+
+      const entrega = obtenerEntregaSeleccionada();
+      if (entrega === "envio") {
+        const dir = document.getElementById("envio-direccion").value.trim();
+        const loc = document.getElementById("envio-localidad").value.trim();
+        const prov = document.getElementById("envio-provincia").value.trim();
+        const cp = document.getElementById("envio-cp").value.trim();
+        if (!dir || !loc || !prov || !cp) {
+          alertBox({ icon:"error", title:"Datos de envío incompletos", text:"Completá dirección, localidad, provincia y código postal." });
+          return false;
+        }
+      }
+      return true;
+    }
+
+    function armarMensajeWhatsApp() {
+      const entrega = obtenerEntregaSeleccionada();
+      const nombre = document.getElementById("contacto-nombre").value.trim();
+      const email = document.getElementById("contacto-email").value.trim();
+
+      const lines = [];
+      lines.push("Pedido mayorista RM KITS:");
+      carrito.forEach(p => lines.push(`${p.codigo} - ${p.titulo} - Cantidad: ${p.cantidad} - Precio unitario: $${p.precio}`));
+      lines.push(`TOTAL: $${calcularTotal()}`);
+      lines.push(""); lines.push("Datos de contacto:"); lines.push(`- Nombre: ${nombre}`); lines.push(`- Email: ${email}`);
+
+      if (entrega === "retiro") {
+        lines.push(""); lines.push("Entrega: Retira en el local");
+      } else {
+        const dir = document.getElementById("envio-direccion").value.trim();
+        const loc = document.getElementById("envio-localidad").value.trim();
+        const prov = document.getElementById("envio-provincia").value.trim();
+        const cp = document.getElementById("envio-cp").value.trim();
+        const ref = document.getElementById("envio-referencias").value.trim();
+        lines.push(""); lines.push("Entrega: Con envío");
+        lines.push(`- Dirección: ${dir}`); lines.push(`- Localidad: ${loc}`); lines.push(`- Provincia: ${prov}`); lines.push(`- Código Postal: ${cp}`);
+        if (ref) lines.push(`- Referencias: ${ref}`);
+      }
+      return encodeURIComponent(lines.join("\n"));
+    }
+
+    function toggleEnvioForm() {
+      const entrega = obtenerEntregaSeleccionada();
+      document.getElementById("envio-form").style.display = entrega === "envio" ? "grid" : "none";
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      renderCarrito();
+      document.querySelectorAll('input[name="entrega"]').forEach(r => r.addEventListener("change", toggleEnvioForm));
+      toggleEnvioForm();
+
+      document.getElementById("enviar-whatsapp-btn").addEventListener("click", () => {
+        if (!validarFormulario()) return;
+        const mensaje = armarMensajeWhatsApp();
+        const url = `https://wa.me/${WHATSAPP_NUMERO}?text=${mensaje}`;
+        window.open(url, "_blank");
+      });
+    });
+  </script>
+</body>
+</html>
