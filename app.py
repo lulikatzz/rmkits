@@ -1,6 +1,5 @@
 from flask import Flask, render_template, request, jsonify
 import sqlite3
-from fpdf import FPDF
 import urllib.parse
 
 app = Flask(__name__)
