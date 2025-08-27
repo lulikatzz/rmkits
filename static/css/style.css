@@ -42,7 +42,7 @@
   .grid {
     display: grid;
     gap: 12px;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
     margin-bottom: 20px;
   }
   
@@ -56,6 +56,7 @@
     align-items: flex-start;
     position: relative;
     min-height: 100px;
+    min-width: 200px;
     overflow: hidden;
     font-size: 0.85rem;
     box-shadow: 0 4px 12px rgba(106,27,154,0.08);
@@ -367,4 +368,26 @@
 .detalle, .detalle span, .precio{
   overflow-wrap: anywhere;   /* rompe palabras largas (códigos, etc.) */
   word-break: break-word;
+}
+.qty-btn {
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid #6a1b9a;
+  background: #fff;
+  color: #6a1b9a;
+  border-radius: 6px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.add-btn {
+  background: #6a1b9a;
+  border: none;
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
 }

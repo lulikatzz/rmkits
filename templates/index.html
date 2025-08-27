@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Lista de precios - RM KITS</title>
   <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="icon" type="image/ico" href="/static/img/iconorm.ico">
+
 </head>
 <body>
   <div class="top-bar">
@@ -68,9 +70,15 @@
           <span class="multiplo"></span>
           <span class="stock"></span>
         </div>
-        <div class="acciones">
+        <!-- <div class="acciones">
           <input type="number" class="cantidad" placeholder="Cant." min="1">
           <button class="agregar-btn">+</button>
+        </div> -->
+        <div class="acciones">
+          <button class="qty-btn menos" type="button">−</button>
+          <input type="number" class="cantidad" placeholder="Cant." min="1">
+          <button class="qty-btn mas" type="button">+</button>  
+          <button class="add-btn" type="button" title="Agregar al carrito">🛒</button>
         </div>
       </div>
     </div>
@@ -166,30 +174,107 @@
         node.querySelector(".multiplo").textContent = `Se vende de a ${p.multiplo} unidades`;
         node.querySelector(".stock").textContent = `Stock: ${p.stock}`;
 
-        const input = node.querySelector(".cantidad");
-        input.min = p.minimo; input.value = p.minimo; input.step = p.multiplo;
+        // const input = node.querySelector(".cantidad");
+        // input.min = p.minimo; input.value = p.minimo; input.step = p.multiplo;
 
-        const btn = node.querySelector(".agregar-btn");
-        btn.addEventListener("click", () => {
-          const cantidad = parseInt(input.value, 10);
-          if (isNaN(cantidad) || cantidad < p.minimo) {
-            alertBox({ icon:"warning", title:"Mínimo de compra", text:`La cantidad mínima es ${p.minimo}.` });
-            return;
+        // const btn = node.querySelector(".agregar-btn");
+        // btn.addEventListener("click", () => {
+        //   const cantidad = parseInt(input.value, 10);
+        //   if (isNaN(cantidad) || cantidad < p.minimo) {
+        //     alertBox({ icon:"warning", title:"Mínimo de compra", text:`La cantidad mínima es ${p.minimo}.` });
+        //     return;
+        //   }
+        //   if (cantidad % p.multiplo !== 0) {
+        //     alertBox({ icon:"warning", title:"Cantidad Inválida", text:`Se venden en packs o cajas cerradas de ${p.multiplo} unidades. Debes elegir un multiplo de ese valor` });
+        //     return;
+        //   }
+        //   if (cantidad > p.stock) {
+        //     alertBox({ icon:"error", title:"Sin stock suficiente", text:`Disponible: ${p.stock}.` });
+        //     return;
+        //   }
+        //   const existente = carrito.find(c => c.id === p.id);
+        //   if (existente) existente.cantidad += cantidad;
+        //   else carrito.push({ id:p.id, codigo:p.codigo, titulo:p.titulo, precio:p.precio, multiplo:p.multiplo, cantidad });
+        //   guardarCarrito();
+        //   toast("Agregado al carrito");
+        // });
+        // ===== NUEVO BLOQUE para [-] [input] [+] [🛒] =====
+          const input = node.querySelector(".cantidad");
+          input.min = p.minimo;
+          input.step = p.multiplo;
+          input.value = p.minimo;
+
+          const btnMenos = node.querySelector(".menos");
+          const btnMas   = node.querySelector(".mas");
+          // const btnAdd   = node.querySelector(".agregar-btn"); // el 🛒
+          const btnAdd = node.querySelector(".add-btn"); // el 🛒
+
+
+          function maxValidoPorStock() {
+            // mayor múltiplo <= stock
+            const k = Math.floor(p.stock / p.multiplo);
+            return Math.max(0, k * p.multiplo);
           }
-          if (cantidad % p.multiplo !== 0) {
-            alertBox({ icon:"warning", title:"Cantidad Inválida", text:`Se venden en packs o cajas cerradas de ${p.multiplo} unidades. Debes elegir un multiplo de ese valor` });
-            return;
+
+          function snapCantidad(n) {
+            if (isNaN(n)) n = p.minimo;
+            // redondeo al múltiplo más cercano
+            n = Math.round(n / p.multiplo) * p.multiplo;
+            // respetar mínimo
+            if (n < p.minimo) n = p.minimo;
+            // respetar tope por stock (múltiplo)
+            const topo = maxValidoPorStock();
+            if (topo > 0) n = Math.min(n, topo);
+            else n = 0; // sin stock suficiente
+            return n;
           }
-          if (cantidad > p.stock) {
-            alertBox({ icon:"error", title:"Sin stock suficiente", text:`Disponible: ${p.stock}.` });
-            return;
+
+          function ajustar(delta) {
+            let n = parseInt(input.value, 10);
+            if (isNaN(n)) n = p.minimo;
+            n += delta * p.multiplo;              // suma/resta por múltiplos
+            input.value = snapCantidad(n);        // encaja al múltiplo válido
           }
-          const existente = carrito.find(c => c.id === p.id);
-          if (existente) existente.cantidad += cantidad;
-          else carrito.push({ id:p.id, codigo:p.codigo, titulo:p.titulo, precio:p.precio, multiplo:p.multiplo, cantidad });
-          guardarCarrito();
-          toast("Agregado al carrito");
-        });
+
+          // Click en - y +
+          btnMenos.addEventListener("click", () => ajustar(-1));
+          btnMas.addEventListener("click", () => ajustar(+1));
+
+          // Si el usuario escribe a mano, encajamos al múltiplo válido
+          input.addEventListener("change", () => {
+            const nuevo = snapCantidad(parseInt(input.value, 10));
+            input.value = nuevo;
+            if (nuevo === 0) {
+              alertBox({ icon:"error", title:"Sin stock", text:`No hay stock suficiente para cumplir el mínimo/múltiplo.` });
+            }
+          });
+
+          // Botón 🛒 (agregar al carrito)
+          btnAdd.addEventListener("click", () => {
+            const cantidad = parseInt(input.value, 10);
+
+            if (!cantidad || cantidad < p.minimo) {
+              alertBox({ icon:"warning", title:"Mínimo de compra", text:`La cantidad mínima es ${p.minimo}.` });
+              return;
+            }
+            if (cantidad % p.multiplo !== 0) {
+              alertBox({ icon:"warning", title:"Cantidad inválida", text:`Debe ser múltiplo de ${p.multiplo}.` });
+              return;
+            }
+            if (cantidad > p.stock) {
+              alertBox({ icon:"error", title:"Sin stock suficiente", text:`Disponible: ${p.stock}.` });
+              return;
+            }
+
+            const existente = carrito.find(c => c.id === p.id);
+            if (existente) existente.cantidad += cantidad;
+            else carrito.push({ id:p.id, codigo:p.codigo, titulo:p.titulo, precio:p.precio, multiplo:p.multiplo, cantidad });
+
+            guardarCarrito();
+            toast("Agregado al carrito");
+          });
+          // ===== FIN NUEVO BLOQUE =====
+
 
         cont.appendChild(node);
       });
@@ -248,6 +333,8 @@
 
       document.getElementById("finalizar-pedido-btn").addEventListener("click", irCarrito);
     });
+
+
   </script>
 </body>
 </html>
