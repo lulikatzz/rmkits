@@ -42,11 +42,14 @@
       </div>
 
       <div id="envio-form" class="envio-form" style="display:none;">
+        <h4>Una vez recibido el pago, el pedido se despacha por ViaCargo entre 24 y 48hs. Se abona al recibir.</h4>
         <div class="form-row"><label>Dirección *</label><input type="text" id="envio-direccion" placeholder="Calle y número"></div>
         <div class="form-row"><label>Localidad *</label><input type="text" id="envio-localidad" placeholder="Ej: La Plata"></div>
         <div class="form-row"><label>Provincia *</label><input type="text" id="envio-provincia" placeholder="Ej: Buenos Aires"></div>
         <div class="form-row"><label>Código Postal *</label><input type="text" id="envio-cp" placeholder="Ej: 1900"></div>
         <div class="form-row"><label>Referencias</label><input type="text" id="envio-referencias" placeholder="Opcional"></div>
+        <div class="form-row"><label>Nombre del destinatario *</label><input type="text" id="envio-nombre-destinatario" placeholder="Ej: Juan Perez"></div>
+        <div class="form-row"><label>Telefono del destinatario *</label><input type="text" id="envio-telefono-destinatario" placeholder="Ej: 11 3231-3442"></div>
       </div>
     </section>
 
@@ -92,6 +95,11 @@
 
     function formatearMoneda(n) { return `$${n.toLocaleString("es-AR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`; }
     function calcularTotal() { return carrito.reduce((sum, p) => sum + p.precio * p.cantidad, 0); }
+    function formatearTotal() {
+      const total = carrito.reduce((sum, p) => sum + p.precio * p.cantidad, 0);
+      return total.toLocaleString("es-AR"); 
+    }
+
     function guardar() { localStorage.setItem(STORAGE_KEY, JSON.stringify(carrito)); }
 
     // Ajusta a un valor válido (>= min) y múltiplo de 'step'
@@ -207,7 +215,9 @@
         const loc = document.getElementById("envio-localidad").value.trim();
         const prov = document.getElementById("envio-provincia").value.trim();
         const cp = document.getElementById("envio-cp").value.trim();
-        if (!dir || !loc || !prov || !cp) {
+        const nombreDest = document.getElementById("envio-nombre-destinatario").value.trim();
+        const TelDest = document.getElementById("envio-telefono-destinatario").value.trim();
+        if (!dir || !loc || !prov || !cp || !nombreDest || !TelDest) {
           alertBox({ icon:"error", title:"Datos de envío incompletos", text:"Completá dirección, localidad, provincia y código postal." });
           return false;
         }
@@ -222,8 +232,8 @@
 
       const lines = [];
       lines.push("Pedido mayorista RM KITS:");
-      carrito.forEach(p => lines.push(`${p.codigo} - ${p.titulo} - Cantidad: ${p.cantidad} - Precio unitario: $${p.precio}`));
-      lines.push(`TOTAL: $${calcularTotal()}`);
+      carrito.forEach(p => lines.push(`${p.titulo} - Cantidad: ${p.cantidad} - Precio unitario: $${p.precio}`));
+      lines.push(`TOTAL: $${formatearTotal()}`);
       lines.push(""); lines.push("Datos de contacto:"); lines.push(`- Nombre: ${nombre}`); lines.push(`- Email: ${email}`);
 
       if (entrega === "retiro") {
@@ -233,9 +243,11 @@
         const loc = document.getElementById("envio-localidad").value.trim();
         const prov = document.getElementById("envio-provincia").value.trim();
         const cp = document.getElementById("envio-cp").value.trim();
+        const nombreDest = document.getElementById("envio-nombre-destinatario").value.trim();
+        const TelDest = document.getElementById("envio-telefono-destinatario").value.trim();
         const ref = document.getElementById("envio-referencias").value.trim();
         lines.push(""); lines.push("Entrega: Con envío");
-        lines.push(`- Dirección: ${dir}`); lines.push(`- Localidad: ${loc}`); lines.push(`- Provincia: ${prov}`); lines.push(`- Código Postal: ${cp}`);
+        lines.push(`- Dirección: ${dir}`); lines.push(`- Localidad: ${loc}`); lines.push(`- Provincia: ${prov}`); lines.push(`- Código Postal: ${cp}`);lines.push(`- Nombre del destinatario: ${nombreDest}`);lines.push(`- Telefono del destinatario: ${TelDest}`); 
         if (ref) lines.push(`- Referencias: ${ref}`);
       }
       return encodeURIComponent(lines.join("\n"));

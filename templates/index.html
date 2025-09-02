@@ -68,7 +68,7 @@
         <div class="detalle">
           <span class="minimo"></span>
           <span class="multiplo"></span>
-          <span class="stock"></span>
+          <!-- <span class="stock"></span> -->
         </div>
         <!-- <div class="acciones">
           <input type="number" class="cantidad" placeholder="Cant." min="1">
@@ -171,8 +171,8 @@
         node.querySelector(".titulo").title = p.titulo;
         node.querySelector(".precio").innerHTML = `<strong>$${p.precio}</strong>`;
         node.querySelector(".minimo").textContent = `Mínimo de compra: ${p.minimo}`;
-        node.querySelector(".multiplo").textContent = `Se vende de a ${p.multiplo} unidades`;
-        node.querySelector(".stock").textContent = `Stock: ${p.stock}`;
+        node.querySelector(".multiplo").textContent = `Se vende de a ${p.multiplo} ${p.multiplo > 1 ? "unidades" : "unidad"}`;
+        // node.querySelector(".stock").textContent = `Stock: ${p.stock}`;
 
         // const input = node.querySelector(".cantidad");
         // input.min = p.minimo; input.value = p.minimo; input.step = p.multiplo;
