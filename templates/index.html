@@ -241,13 +241,7 @@
           btnMas.addEventListener("click", () => ajustar(+1));
 
           // Si el usuario escribe a mano, encajamos al múltiplo válido
-          input.addEventListener("change", () => {
-            const nuevo = snapCantidad(parseInt(input.value, 10));
-            input.value = nuevo;
-            if (nuevo === 0) {
-              alertBox({ icon:"error", title:"Sin stock", text:`No hay stock suficiente para cumplir el mínimo/múltiplo.` });
-            }
-          });
+
 
           // Botón 🛒 (agregar al carrito)
           btnAdd.addEventListener("click", () => {
@@ -263,6 +257,13 @@
             }
             if (cantidad > p.stock) {
               alertBox({ icon:"error", title:"Sin stock suficiente", text:`Disponible: ${p.stock}.` });
+              const nuevo = snapCantidad(parseInt(input.value, 10));
+              input.value = nuevo;
+              // input.addEventListener("change", () => {
+              // if (nuevo === 0) {
+              //   alertBox({ icon:"error", title:"Sin stock", text:`No hay stock suficiente para cumplir el mínimo/múltiplo.` });
+              // }
+              // });
               return;
             }
 
