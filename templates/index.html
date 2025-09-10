@@ -268,8 +268,15 @@
             }
 
             const existente = carrito.find(c => c.id === p.id);
-            if (existente) existente.cantidad += cantidad;
+            if (existente){
+              if((existente.cantidad + cantidad) > p.stock){
+                alertBox({ icon:"error", title:"Sin stock suficiente", text:`Disponible: ${p.stock}.` });
+              }else{
+                existente.cantidad += cantidad;
+              }
+            }
             else carrito.push({ id:p.id, codigo:p.codigo, titulo:p.titulo, precio:p.precio, multiplo:p.multiplo, minimo:p.minimo, maximo:p.stock, cantidad });
+
 
             guardarCarrito();
             toast("Agregado al carrito");
