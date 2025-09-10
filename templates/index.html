@@ -171,7 +171,7 @@
         node.querySelector(".titulo").title = p.titulo;
         node.querySelector(".precio").innerHTML = `<strong>$${p.precio}</strong>`;
         node.querySelector(".minimo").textContent = `Mínimo de compra: ${p.minimo}`;
-        node.querySelector(".multiplo").textContent = `Se vende de a ${p.multiplo} ${p.multiplo > 1 ? "unidades" : "unidad"}`;
+        node.querySelector(".multiplo").textContent = `Se vende ${p.multiplo > 1 ? ` de a ${p.multiplo} unidades` : "de a 1 unidad"}`;
         // node.querySelector(".stock").textContent = `Stock: ${p.stock}`;
 
         // const input = node.querySelector(".cantidad");
@@ -252,11 +252,11 @@
               return;
             }
             if (cantidad % p.multiplo !== 0) {
-              alertBox({ icon:"warning", title:"Cantidad inválida", text:`Debe ser múltiplo de ${p.multiplo}.` });
+              alertBox({ icon:"warning", title:"Cantidad inválida", text:`Este producto se vende en packs o cajas cerradas de a ${p.multiplo} unidades. Tenes que seleccionar un multiplo de ese valor. O también, podes ajustar la cantidad con los botones + y -` });
               return;
             }
             if (cantidad > p.stock) {
-              alertBox({ icon:"error", title:"Sin stock suficiente", text:`Disponible: ${p.stock}.` });
+              alertBox({ icon:"warning", title:"Stock limitado", text:`Para esa cantidad, contáctanos directamente por Whatsapp y te confirmamos la disponibilidad. Whatsapp: 11 5857 3906` });
               const nuevo = snapCantidad(parseInt(input.value, 10));
               input.value = nuevo;
               // input.addEventListener("change", () => {
@@ -270,7 +270,7 @@
             const existente = carrito.find(c => c.id === p.id);
             if (existente){
               if((existente.cantidad + cantidad) > p.stock){
-                alertBox({ icon:"error", title:"Sin stock suficiente", text:`Disponible: ${p.stock}.` });
+                alertBox({ icon:"warning", title:"Stock limitado", text:`Para esa cantidad, contáctanos directamente por Whatsapp y te confirmamos la disponibilidad. Whatsapp: 11 5857 3906` });
               }else{
                 existente.cantidad += cantidad;
               }

@@ -391,3 +391,50 @@
   font-size: 1rem;
   line-height: 1;
 }
+
+/* PC / desktop: box a la izquierda, campos a la derecha en 2 columnas */
+.envio-layout{
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.envios-box{
+  background:#fafafa;
+  border:1px solid #ddd;
+  border-radius:8px;
+  padding:12px 16px;
+  font-size:14px;
+  line-height:1.45;
+  grid-column: 1;
+  grid-row: 1 / -1;            /* ocupa toda la altura al lado de los campos */
+}
+
+.envio-fields{
+  grid-column: 2;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(240px,1fr));
+  gap: 12px 16px;
+}
+
+.form-row{ display:flex; flex-direction:column; }
+.form-row label{ margin-bottom:6px; font-weight:600; }
+.form-row input{
+  padding:10px 12px; border:1px solid #ddd; border-radius:8px; font-size:14px;
+}
+
+/* 📱 Mobile / tablets: TODO apilado y el box ARRIBA */
+@media (max-width: 1024px){ /* subí el corte para que apile antes */
+  .envio-layout{
+    grid-template-columns: 1fr;   /* 1 columna */
+  }
+  .envios-box{
+    grid-column: 1;
+    grid-row: auto !important;    /* anula el span vertical y lo coloca primero */
+  }
+  .envio-fields{
+    grid-column: 1;
+    grid-template-columns: 1fr;   /* campos en una sola columna */
+  }
+}
