@@ -269,7 +269,11 @@
 
             const existente = carrito.find(c => c.id === p.id);
             if (existente) existente.cantidad += cantidad;
+<<<<<<< HEAD
             else carrito.push({ id:p.id, codigo:p.codigo, titulo:p.titulo, precio:p.precio, multiplo:p.multiplo, cantidad });
+=======
+            else carrito.push({ id:p.id, codigo:p.codigo, titulo:p.titulo, precio:p.precio, multiplo:p.multiplo, minimo:p.minimo, maximo:p.stock, cantidad });
+>>>>>>> 4a742a1 (Subida inicial del proyecto RMKITS)
 
             guardarCarrito();
             toast("Agregado al carrito");
