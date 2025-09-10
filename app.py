@@ -1,8 +1,16 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, redirect
 import sqlite3
 import urllib.parse
 
+
+
 app = Flask(__name__)
+
+@app.before_request
+def before_request():
+    if request.headers.get("X-Forwarded-Proto") == "http":
+        return redirect(request.url.replace("http://", "https://", 1), code=301)
+
 
 def get_productos():
     conn = sqlite3.connect("productos.db")
