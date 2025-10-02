@@ -438,3 +438,7 @@
     grid-template-columns: 1fr;   /* campos en una sola columna */
   }
 }
+
+html, body {
+  touch-action: manipulation; /* evita doble tap zoom, pero permite pinch-zoom */
+}
