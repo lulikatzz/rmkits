@@ -58,4 +58,4 @@ for _, row in df.iterrows():
 
 conn.commit()
 conn.close()
-print("✅ Productos importados correctamente con categoría normalizada.")
+print("✅ Productos importados correctamente con categoría normalizada. ")
