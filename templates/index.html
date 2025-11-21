@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=5">
+  <title>Lista de precios - RM KITS</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="icon" type="image/ico" href="/static/img/iconorm.ico">
+
+</head>
+<body>
+  <div class="top-bar">
+    <div class="logo">
+      <img src="/static/img/logo.PNG" alt="RM KITS Logo">
+    </div>
+    <div class="brand-name">RM KITS</div>
+    <div class="cart-icon-wrapper">
+      <a href="/carrito" class="cart-link" aria-label="Ver carrito">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="9" cy="21" r="1"></circle>
+          <circle cx="20" cy="21" r="1"></circle>
+          <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path>
+        </svg>
+        <span id="badge" class="badge">0</span>
+      </a>
+    </div>
+  </div>
+
+  <section class="info-section">
+    <p><strong>Compras mayoristas RM KITS:</strong> solo permitimos compras a partir de <strong>$200.000</strong>. Hacemos envíos a todo el país.</p>
+  </section>
+
+  <header>
+    <h1>Productos</h1>
+
+    <div class="filtros">
+      <button class="filtro-btn active" data-cat="">Todos</button>
+      <button class="filtro-btn" data-cat="libreria">Librería</button>
+      <button class="filtro-btn" data-cat="jugueteria/cotillon">Juguetería/Cotillón</button>
+    </div>
+
+    <div class="controls">
+      <input type="text" id="filtro" placeholder="Buscar por título...">
+    </div>
+  </header>
+
+  <div id="productos" class="grid" data-productos='{{ productos|tojson | safe }}'></div>
+
+  <div class="paginacion">
+    <button id="prev-btn" disabled>« Anterior</button>
+    <span id="pagina-info"></span>
+    <button id="next-btn">Siguiente »</button>
+  </div>
+
+  <div class="footer-actions">
+    <button id="finalizar-pedido-btn">Finalizar pedido</button>
+  </div>
+
+  <template id="producto-template">
+    <div class="card" data-categoria="">
+      <div class="img-wrapper">
+        <img class="img" src="" alt="">
+      </div>
+      <div class="info">
+        <div class="titulo" title=""></div>
+        <div class="precio"></div>
+        <div class="detalle">
+          <span class="minimo"></span>
+          <span class="multiplo"></span>
+          <!-- <span class="stock"></span> -->
+        </div>
+        <!-- <div class="acciones">
+          <input type="number" class="cantidad" placeholder="Cant." min="1">
+          <button class="agregar-btn">+</button>
+        </div> -->
+        <div class="acciones">
+          <button class="qty-btn menos" type="button">−</button>
+          <input type="number" class="cantidad" placeholder="Cant." min="1">
+          <button class="qty-btn mas" type="button">+</button>  
+          <button class="add-btn" type="button" title="Agregar al carrito">🛒</button>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <!-- SweetAlert2 -->
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+  <style>.swal2-popup{border-radius:14px!important}</style>
+
+  <script>
+    // Helpers de alertas bonitas
+    function alertBox({title="", text="", icon="info", confirmText="Aceptar"} = {}) {
+      return Swal.fire({ title, text, icon, confirmButtonText: confirmText, confirmButtonColor:"#6a1b9a" });
+    }
+    function toast(title, icon="success") {
+      return Swal.fire({ toast:true, position:"top-end", showConfirmButton:false, timer:2000, timerProgressBar:true, title, icon });
+    }
+
+    const PRODUCTOS_POR_PAGINA = 24;
+    const STORAGE_KEY = "rmkits_carrito";
+    let carrito = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+    const cont = document.getElementById("productos");
+
+    // --- Normalización ---
+    function normalizarTexto(s) {
+      return (s || "").toString().trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    }
+    function normalizarCategoriaValor(sRaw) {
+      const s = normalizarTexto(sRaw);
+      if (!s) return "";
+      if (s.includes("jugueteria") || s.includes("cotillon")) return "jugueteria/cotillon";
+      if (s.includes("libreria")) return "libreria";
+      return s;
+    }
+
+    // --- Cargar productos ---
+    let productosRaw = [];
+    try { productosRaw = JSON.parse(cont.dataset.productos); } catch (e) { console.error("Error parseando productos:", e); productosRaw = []; }
+
+    // --- Estado ---
+    let paginaActual = 1;
+    let textoBusqueda = "";
+    let filtroCategoria = "";
+    let productosFiltrados = [...productosRaw];
+
+    function leerCategoriaDeURL() {
+      const params = new URLSearchParams(window.location.search);
+      filtroCategoria = normalizarCategoriaValor(params.get("cat") || "");
+    }
+
+    function actualizarBadge() {
+      const cantidadTotal = carrito.reduce((s, p) => s + p.cantidad, 0);
+      document.getElementById("badge").textContent = cantidadTotal;
+    }
+    function guardarCarrito() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(carrito));
+      actualizarBadge();
+    }
+
+
+    function aplicarFiltro() {
+      const q = textoBusqueda.trim().toLowerCase();
+      const catFiltro = normalizarCategoriaValor(filtroCategoria);
+      productosFiltrados = productosRaw.filter(p => {
+        const coincideTexto = !q || (p.titulo || "").toLowerCase().includes(q);
+        const catProd = normalizarCategoriaValor(p.categoria);
+        const coincideCat = !catFiltro || catProd === catFiltro;
+        const tieneStock = p.stock > 0; // 👈 FILTRO EXTRA
+        return coincideTexto && coincideCat && tieneStock;
+      });
+      paginaActual = 1;
+      renderProductos();
+    }
+
+
+    function renderProductos() {
+      cont.innerHTML = "";
+      const inicio = (paginaActual - 1) * PRODUCTOS_POR_PAGINA;
+      const slice = productosFiltrados.slice(inicio, inicio + PRODUCTOS_POR_PAGINA);
+      const tpl = document.getElementById("producto-template");
+
+      if (slice.length === 0) cont.innerHTML = `<p style="padding:8px;">No se encontraron productos.</p>`;
+
+      slice.forEach(p => {
+        const node = tpl.content.cloneNode(true);
+        node.querySelector(".card").dataset.categoria = normalizarCategoriaValor(p.categoria);
+        node.querySelector(".img").src = `/static/img/${p.imagen}`;
+        node.querySelector(".img").alt = p.titulo;
+        node.querySelector(".titulo").textContent = p.titulo;
+        node.querySelector(".titulo").title = p.titulo;
+        node.querySelector(".precio").innerHTML = `<strong>$${p.precio}</strong>`;
+        node.querySelector(".minimo").textContent = `Mínimo de compra: ${p.minimo}`;
+        node.querySelector(".multiplo").textContent = `Se vende ${p.multiplo > 1 ? ` de a ${p.multiplo} unidades` : "de a 1 unidad"}`;
+        // node.querySelector(".stock").textContent = `Stock: ${p.stock}`;
+
+        // const input = node.querySelector(".cantidad");
+        // input.min = p.minimo; input.value = p.minimo; input.step = p.multiplo;
+
+        // const btn = node.querySelector(".agregar-btn");
+        // btn.addEventListener("click", () => {
+        //   const cantidad = parseInt(input.value, 10);
+        //   if (isNaN(cantidad) || cantidad < p.minimo) {
+        //     alertBox({ icon:"warning", title:"Mínimo de compra", text:`La cantidad mínima es ${p.minimo}.` });
+        //     return;
+        //   }
+        //   if (cantidad % p.multiplo !== 0) {
+        //     alertBox({ icon:"warning", title:"Cantidad Inválida", text:`Se venden en packs o cajas cerradas de ${p.multiplo} unidades. Debes elegir un multiplo de ese valor` });
+        //     return;
+        //   }
+        //   if (cantidad > p.stock) {
+        //     alertBox({ icon:"error", title:"Sin stock suficiente", text:`Disponible: ${p.stock}.` });
+        //     return;
+        //   }
+        //   const existente = carrito.find(c => c.id === p.id);
+        //   if (existente) existente.cantidad += cantidad;
+        //   else carrito.push({ id:p.id, codigo:p.codigo, titulo:p.titulo, precio:p.precio, multiplo:p.multiplo, cantidad });
+        //   guardarCarrito();
+        //   toast("Agregado al carrito");
+        // });
+        // ===== NUEVO BLOQUE para [-] [input] [+] [🛒] =====
+          const input = node.querySelector(".cantidad");
+          input.min = p.minimo;
+          input.step = p.multiplo;
+          input.value = p.minimo;
+
+          const btnMenos = node.querySelector(".menos");
+          const btnMas   = node.querySelector(".mas");
+          // const btnAdd   = node.querySelector(".agregar-btn"); // el 🛒
+          const btnAdd = node.querySelector(".add-btn"); // el 🛒
+
+
+          function maxValidoPorStock() {
+            // mayor múltiplo <= stock
+            const k = Math.floor(p.stock / p.multiplo);
+            return Math.max(0, k * p.multiplo);
+          }
+
+          function snapCantidad(n) {
+            if (isNaN(n)) n = p.minimo;
+            // redondeo al múltiplo más cercano
+            n = Math.round(n / p.multiplo) * p.multiplo;
+            // respetar mínimo
+            if (n < p.minimo) n = p.minimo;
+            // respetar tope por stock (múltiplo)
+            const topo = maxValidoPorStock();
+            if (topo > 0) n = Math.min(n, topo);
+            else n = 0; // sin stock suficiente
+            return n;
+          }
+
+          function ajustar(delta) {
+            let n = parseInt(input.value, 10);
+            if (isNaN(n)) n = p.minimo;
+            n += delta * p.multiplo;              // suma/resta por múltiplos
+            input.value = snapCantidad(n);        // encaja al múltiplo válido
+          }
+
+          // Click en - y +
+          btnMenos.addEventListener("click", () => ajustar(-1));
+          btnMas.addEventListener("click", () => ajustar(+1));
+
+          // Si el usuario escribe a mano, encajamos al múltiplo válido
+
+
+          // Botón 🛒 (agregar al carrito)
+          btnAdd.addEventListener("click", () => {
+            const cantidad = parseInt(input.value, 10);
+
+            if (!cantidad || cantidad < p.minimo) {
+              alertBox({ icon:"warning", title:"Mínimo de compra", text:`La cantidad mínima es ${p.minimo}.` });
+              return;
+            }
+            if (cantidad % p.multiplo !== 0) {
+              alertBox({ icon:"warning", title:"Cantidad inválida", text:`Este producto se vende en packs o cajas cerradas de a ${p.multiplo} unidades. Tenes que seleccionar un multiplo de ese valor. O también, podes ajustar la cantidad con los botones + y -` });
+              return;
+            }
+            if (cantidad > p.stock) {
+              alertBox({ icon:"warning", title:"Stock limitado", text:`Para esa cantidad, contáctanos directamente por Whatsapp y te confirmamos la disponibilidad. Whatsapp: 11 5857 3906` });
+              const nuevo = snapCantidad(parseInt(input.value, 10));
+              input.value = nuevo;
+              // input.addEventListener("change", () => {
+              // if (nuevo === 0) {
+              //   alertBox({ icon:"error", title:"Sin stock", text:`No hay stock suficiente para cumplir el mínimo/múltiplo.` });
+              // }
+              // });
+              return;
+            }
+
+            const existente = carrito.find(c => c.id === p.id);
+            if (existente){
+              if((existente.cantidad + cantidad) > p.stock){
+                alertBox({ icon:"warning", title:"Stock limitado", text:`Para esa cantidad, contáctanos directamente por Whatsapp y te confirmamos la disponibilidad. Whatsapp: 11 5857 3906` });
+              }else{
+                existente.cantidad += cantidad;
+              }
+            }
+            else carrito.push({ id:p.id, codigo:p.codigo, titulo:p.titulo, precio:p.precio, multiplo:p.multiplo, minimo:p.minimo, maximo:p.stock, cantidad });
+
+
+            guardarCarrito();
+            toast("Agregado al carrito");
+          });
+          // ===== FIN NUEVO BLOQUE =====
+
+
+        cont.appendChild(node);
+      });
+
+      actualizarPaginacion();
+    }
+
+    function actualizarPaginacion() {
+      const totalPags = Math.ceil(productosFiltrados.length / PRODUCTOS_POR_PAGINA) || 1;
+      document.getElementById("pagina-info").textContent = `Página ${paginaActual} de ${totalPags}`;
+      document.getElementById("prev-btn").disabled = paginaActual === 1;
+      document.getElementById("next-btn").disabled = paginaActual >= totalPags;
+    }
+
+    function irCarrito() { window.location.href = "/carrito"; }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      leerCategoriaDeURL();
+
+      // Marcar botón activo inicial
+      document.querySelectorAll(".filtro-btn").forEach(b => {
+        if (normalizarCategoriaValor(b.dataset.cat) === filtroCategoria) {
+          document.querySelectorAll(".filtro-btn").forEach(x => x.classList.remove("active"));
+          b.classList.add("active");
+        }
+      });
+
+      aplicarFiltro();
+      actualizarBadge();
+
+      document.getElementById("filtro").addEventListener("input", e => {
+        textoBusqueda = e.target.value;
+        aplicarFiltro();
+      });
+
+      document.querySelectorAll(".filtro-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          document.querySelectorAll(".filtro-btn").forEach(x => x.classList.remove("active"));
+          btn.classList.add("active");
+          filtroCategoria = btn.dataset.cat || "";
+          aplicarFiltro();
+          const url = new URL(window.location.href);
+          if (filtroCategoria) url.searchParams.set("cat", filtroCategoria);
+          else url.searchParams.delete("cat");
+          window.history.replaceState({}, "", url);
+        });
+      });
+
+      document.getElementById("prev-btn").addEventListener("click", () => {
+        if (paginaActual > 1) { paginaActual--; renderProductos(); }
+      });
+      document.getElementById("next-btn").addEventListener("click", () => {
+        const totalPags = Math.ceil(productosFiltrados.length / PRODUCTOS_POR_PAGINA);
+        if (paginaActual < totalPags) { paginaActual++; renderProductos(); }
+      });
+
+      document.getElementById("finalizar-pedido-btn").addEventListener("click", irCarrito);
+    });
+
+        let lastTouchEnd = 0;
+    document.addEventListener('touchend', function (event) {
+      const now = (new Date()).getTime();
+      if (now - lastTouchEnd <= 300) {
+        event.preventDefault(); // evita zoom con doble tap
+      }
+      lastTouchEnd = now;
+    }, false);
+  </script>
+</body>
+</html>

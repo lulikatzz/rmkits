@@ -1,0 +1,444 @@
+* {
+    box-sizing: border-box;
+  }
+  
+  body {
+    font-family: Arial, sans-serif;
+    background: #f9f9f9;
+    margin: 0;
+    padding: 20px;
+    color: #333;
+  }
+  
+  header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 15px;
+  }
+  
+  header h1 {
+    margin: 0;
+    flex: 1 1 200px;
+    font-size: 1.8rem;
+    color: #4a148c;
+  }
+  
+  .controls {
+    flex: 1 1 250px;
+    display: flex;
+    justify-content: flex-end;
+  }
+  
+  #filtro {
+    padding: 6px 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    width: 100%;
+    max-width: 300px;
+  }
+  
+  .grid {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    margin-bottom: 20px;
+  }
+  
+  .card {
+    background: white;
+    border: 1px solid #e0d7ec;
+    border-radius: 12px;
+    padding: 8px;
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    position: relative;
+    min-height: 100px;
+    min-width: 200px;
+    overflow: hidden;
+    font-size: 0.85rem;
+    box-shadow: 0 4px 12px rgba(106,27,154,0.08);
+  }
+  
+  .img-wrapper {
+    flex: 0 0 60px;
+    height: 60px;
+    overflow: hidden;
+    border-radius: 6px;
+    background: #f0f0f0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .card .img {
+    max-width: 100%;
+    max-height: 100%;
+    display: block;
+    object-fit: contain;
+  }
+  
+  .info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  
+  .titulo {
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  
+  .precio {
+    color: #444;
+  }
+  
+  .detalle {
+    font-size: 0.65rem;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 2px;
+  }
+  
+  .acciones {
+    margin-top: auto;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  
+  .acciones input.cantidad {
+    width: 60px;
+    padding: 4px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+  }
+  
+  .agregar-btn {
+    background: #6a1b9a;
+    border: none;
+    color: white;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 1rem;
+    line-height: 1;
+  }
+  
+  .paginacion {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    margin: 15px 0;
+    flex-wrap: wrap;
+  }
+  
+  .paginacion button {
+    padding: 6px 12px;
+    border: 1px solid #6a1b9a;
+    background: white;
+    color: #6a1b9a;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  
+  .paginacion button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  
+  .footer-actions {
+    text-align: center;
+    margin-top: 10px;
+  }
+  
+  #finalizar-pedido-btn {
+    background: #4a148c;
+    color: white;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1rem;
+  }
+
+/* ya debería incluir todo lo anterior; agrego aquí lo nuevo */
+
+.top-bar {
+    background: #6a1b9a;
+    color: white;
+    display: flex;
+    align-items: center;
+    padding: 8px 16px;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  
+  .top-bar .logo img {
+    height: 40px;
+    object-fit: contain;
+  }
+  
+  .top-bar .brand-name {
+    font-size: 1.6rem;
+    font-weight: bold;
+    letter-spacing: 1px;
+  }
+  
+  .info-section {
+    background: #f3e5f5;
+    border: 1px solid #d1c4e9;
+    padding: 12px 16px;
+    border-radius: 8px;
+    margin: 12px 0 20px;
+    font-size: 0.95rem;
+  }
+  
+.top-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: #6a1b9a;
+  color: white;
+}
+
+/* empuja el carrito a la derecha si no usás spacer */
+.cart-icon-wrapper {
+  margin-left: auto;
+  position: relative;
+}
+
+/* ícono del carrito en blanco */
+.cart-link svg {
+  stroke: white;
+  fill: none;
+}
+
+/* badge visible sobre el carrito */
+.badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  background: #ffcc00;
+  color: #333;
+  border-radius: 50%;
+  padding: 3px 6px;
+  font-size: 0.6rem;
+  font-weight: bold;
+}
+
+/* "Seguir comprando" como link blanco */
+.volver {
+  color: white;
+  text-decoration: none;
+  font-weight: 600;
+  background: rgba(255,255,255,0.1);
+  padding: 6px 12px;
+  border-radius: 6px;
+  display: inline-block;
+}
+
+.volver:hover {
+  background: rgba(255,255,255,0.2);
+}
+
+/* Filtros de categoría */
+.filtros {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 6px 0 10px;
+}
+
+.filtro-btn {
+  padding: 6px 10px;
+  border: 1px solid #6a1b9a;
+  background: #fff;
+  color: #6a1b9a;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.filtro-btn.active {
+  background: #6a1b9a;
+  color: #fff;
+}
+
+/* --- Checkout / formulario --- */
+.checkout-section {
+  background: #fff;
+  border: 1px solid #e0d7ec;
+  border-radius: 10px;
+  padding: 12px;
+  margin-top: 16px;
+  box-shadow: 0 4px 12px rgba(106,27,154,0.05);
+}
+
+.checkout-section h3 {
+  margin: 0 0 10px 0;
+  color: #4a148c;
+  font-size: 1.1rem;
+}
+
+.entrega-opciones {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.radio {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.envio-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.form-row label {
+  font-size: 0.9rem;
+  color: #333;
+}
+
+.form-row input {
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.checkout-actions {
+  margin-top: 16px;
+  text-align: center;
+}
+
+.checkout-actions #enviar-whatsapp-btn {
+  background: #4a148c;
+  color: #fff;
+  border: none;
+  padding: 10px 18px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+/* La tarjeta vuelve a recortar dentro del borde redondeado */
+.card{
+  overflow: hidden;          /* <- vuelve a hidden */
+  padding-right: 10px;       /* respirito a la derecha */
+}
+
+/* Permite que la columna de texto se ENCOJA dentro del flex */
+.info{
+  min-width: 0;              /* clave para que no se desborde en flex */
+}
+
+/* El título y detalles deben romper palabra si hace falta */
+.titulo{
+  white-space: normal;       /* deja de forzar una sola línea */
+  overflow: visible;
+  text-overflow: clip;       /* sin “…” */
+  word-break: break-word;    /* o: overflow-wrap:anywhere; */
+}
+
+.detalle, .detalle span, .precio{
+  overflow-wrap: anywhere;   /* rompe palabras largas (códigos, etc.) */
+  word-break: break-word;
+}
+.qty-btn {
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid #6a1b9a;
+  background: #fff;
+  color: #6a1b9a;
+  border-radius: 6px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.add-btn {
+  background: #6a1b9a;
+  border: none;
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+/* PC / desktop: box a la izquierda, campos a la derecha en 2 columnas */
+.envio-layout{
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.envios-box{
+  background:#fafafa;
+  border:1px solid #ddd;
+  border-radius:8px;
+  padding:12px 16px;
+  font-size:14px;
+  line-height:1.45;
+  grid-column: 1;
+  grid-row: 1 / -1;            /* ocupa toda la altura al lado de los campos */
+}
+
+.envio-fields{
+  grid-column: 2;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(240px,1fr));
+  gap: 12px 16px;
+}
+
+.form-row{ display:flex; flex-direction:column; }
+.form-row label{ margin-bottom:6px; font-weight:600; }
+.form-row input{
+  padding:10px 12px; border:1px solid #ddd; border-radius:8px; font-size:14px;
+}
+
+/* 📱 Mobile / tablets: TODO apilado y el box ARRIBA */
+@media (max-width: 1024px){ /* subí el corte para que apile antes */
+  .envio-layout{
+    grid-template-columns: 1fr;   /* 1 columna */
+  }
+  .envios-box{
+    grid-column: 1;
+    grid-row: auto !important;    /* anula el span vertical y lo coloca primero */
+  }
+  .envio-fields{
+    grid-column: 1;
+    grid-template-columns: 1fr;   /* campos en una sola columna */
+  }
+}
+
+html, body {
+  touch-action: manipulation; /* evita doble tap zoom, pero permite pinch-zoom */
+}
