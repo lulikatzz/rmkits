@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lista de Precios - RM KITS</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+      background: white;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 30px;
+      border-bottom: 3px solid #6a1b9a;
+      padding-bottom: 20px;
+      page-break-inside: avoid;
+      page-break-after: avoid;
+    }
+
+    .header h1 {
+      color: #6a1b9a;
+      font-size: 2.5rem;
+      margin-bottom: 5px;
+    }
+
+    .header p {
+      color: #666;
+      font-size: 1.1rem;
+    }
+    
+    @media print {
+      .header {
+        border-bottom: 2px solid #000;
+        padding-bottom: 10px;
+        margin-bottom: 15px;
+      }
+      
+      .header h1 {
+        color: #000;
+        font-size: 1.8rem;
+      }
+      
+      .header p {
+        color: #000;
+        font-size: 1rem;
+      }
+    }
+
+    .controls {
+      display: flex;
+      gap: 15px;
+      margin-bottom: 20px;
+      margin-left: auto;
+      margin-right: auto;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      max-width: fit-content;
+    }
+    
+    .no-print {
+      display: block;
+    }
+
+    .controls select,
+    .controls input {
+      padding: 10px;
+      border: 2px solid #6a1b9a;
+      border-radius: 6px;
+      font-size: 1rem;
+      min-width: 200px;
+    }
+
+    .controls button {
+      padding: 10px 20px;
+      background: #6a1b9a;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 1rem;
+      font-weight: bold;
+    }
+
+    .controls button:hover {
+      background: #4a148c;
+    }
+
+    .info-bar {
+      background: #f3e5f5;
+      padding: 15px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      text-align: center;
+      font-size: 1.1rem;
+      color: #6a1b9a;
+      font-weight: bold;
+    }
+
+    .products-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 30px;
+      background: white;
+    }
+
+    .products-table th,
+    .products-table td {
+      border: 1px solid #333;
+      padding: 8px 12px;
+      text-align: left;
+    }
+
+    .products-table th {
+      background: #6a1b9a;
+      color: white;
+      font-weight: bold;
+    }
+
+    @media screen {
+      .products-table th {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+      }
+    }
+
+    @media print {
+      .products-table thead {
+        display: table-header-group;
+      }
+    }
+
+    .products-table tbody tr:nth-child(even) {
+      background: #f9f9f9;
+    }
+
+    .products-table tbody tr:hover {
+      background: #f3e5f5;
+    }
+
+    .product-image-cell {
+      width: 80px;
+      text-align: center;
+      padding: 4px;
+    }
+
+    .product-image-cell img {
+      width: 60px;
+      height: 60px;
+      object-fit: cover;
+      border-radius: 4px;
+    }
+
+    .no-image-small {
+      width: 60px;
+      height: 60px;
+      background: #f5f5f5;
+      border: 1px dashed #ccc;
+      border-radius: 4px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.7rem;
+      color: #999;
+    }
+
+    .product-title-cell {
+      font-weight: 500;
+      color: #212121;
+    }
+
+    .product-code-cell {
+      color: #757575;
+      font-family: monospace;
+    }
+
+    .product-price-cell {
+      font-weight: bold;
+      color: #6a1b9a;
+      text-align: right;
+      font-size: 1.1rem;
+    }
+
+    .category-section {
+      margin-bottom: 40px;
+      page-break-inside: avoid;
+    }
+
+    .category-header {
+      background: #6a1b9a;
+      color: white;
+      padding: 12px 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      font-size: 1.3rem;
+      font-weight: bold;
+    }
+
+    .footer {
+      text-align: center;
+      margin-top: 40px;
+      padding-top: 20px;
+      border-top: 2px solid #e0e0e0;
+      color: #757575;
+      font-size: 0.9rem;
+    }
+
+    /* Estilos de impresión */
+    @media print {
+      * {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      
+      body {
+        padding: 10px;
+      }
+      
+      .no-print,
+      .controls,
+      .info-bar {
+        display: none !important;
+      }
+
+      .header {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+      }
+
+      .category-section {
+        page-break-inside: avoid;
+      }
+
+      .products-table {
+        page-break-before: auto;
+      }
+
+      .products-table th,
+      .products-table td {
+        border: 1px solid #000;
+        padding: 6px 8px;
+      }
+
+      .products-table th {
+        background: #333 !important;
+        color: white !important;
+      }
+
+      .product-price-cell {
+        color: #000;
+      }
+
+      .category-header {
+        background: #333 !important;
+        color: white !important;
+        page-break-after: avoid;
+      }
+    }
+
+    @page {
+      margin: 1cm;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>RM KITS</h1>
+    <p>Lista de Precios</p>
+  </div>
+
+  <div class="controls no-print">
+    <input type="text" id="searchInput" placeholder="🔍 Buscar productos...">
+    <select id="categoryFilter">
+      <option value="">📁 Todas las categorías</option>
+      {% for categoria in categorias %}
+        <option value="{{ categoria }}">{{ categoria }}</option>
+      {% endfor %}
+    </select>
+    <button onclick="window.print()">🖨️ Imprimir</button>
+  </div>
+
+  <div class="info-bar">
+    Mostrando: <span id="visibleCount">{{ productos|length }}</span> productos con stock
+  </div>
+
+  <div id="productsContainer">
+    <!-- Productos agrupados por categoría -->
+    {% set categorias_dict = {} %}
+    {% for producto in productos %}
+      {% set cat = producto.categoria or 'Sin categoría' %}
+      {% if cat not in categorias_dict %}
+        {% set _ = categorias_dict.update({cat: []}) %}
+      {% endif %}
+      {% set _ = categorias_dict[cat].append(producto) %}
+    {% endfor %}
+
+    {% for categoria, prods in categorias_dict.items()|sort %}
+    <div class="category-section" data-category="{{ categoria }}">
+      <div class="category-header">{{ categoria }}</div>
+      <table class="products-table">
+        <thead>
+          <tr>
+            <th>Imagen</th>
+            <th>Código</th>
+            <th>Producto</th>
+            <th style="text-align: right">Precio</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for producto in prods %}
+          <tr class="product-row" data-product-name="{{ producto.titulo|lower }}" data-product-code="{{ producto.codigo|lower }}">
+            <td class="product-image-cell">
+              {% if producto.imagen %}
+                <img src="/static/img/{{ producto.imagen }}" alt="{{ producto.titulo }}" onerror="this.outerHTML='<div class=\'no-image-small\'>Sin img</div>'">
+              {% else %}
+                <div class="no-image-small">Sin img</div>
+              {% endif %}
+            </td>
+            <td class="product-code-cell">{{ producto.codigo }}</td>
+            <td class="product-title-cell">{{ producto.titulo }}</td>
+            <td class="product-price-cell">${{ "{:,.0f}".format(producto.precio) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="footer">
+    <p>RM KITS - Lista de precios actualizada al {{ now.strftime('%d/%m/%Y') }}</p>
+    <p>Precios sujetos a cambios sin previo aviso</p>
+  </div>
+
+  <script>
+    // Función de búsqueda
+    const searchInput = document.getElementById('searchInput');
+    const categoryFilter = document.getElementById('categoryFilter');
+
+    function aplicarFiltros() {
+      const searchTerm = searchInput.value.toLowerCase();
+      const categorySelected = categoryFilter.value;
+      
+      const categorySections = document.querySelectorAll('.category-section');
+      let visibleCount = 0;
+
+      categorySections.forEach(section => {
+        const categoria = section.dataset.category;
+        const rows = section.querySelectorAll('.product-row');
+        let sectionHasVisibleRows = false;
+
+        rows.forEach(row => {
+          const productName = row.dataset.productName;
+          const productCode = row.dataset.productCode;
+          
+          const matchesSearch = searchTerm === '' || 
+                               productName.includes(searchTerm) || 
+                               productCode.includes(searchTerm);
+          const matchesCategory = categorySelected === '' || categoria === categorySelected;
+
+          if (matchesSearch && matchesCategory) {
+            row.style.display = '';
+            visibleCount++;
+            sectionHasVisibleRows = true;
+          } else {
+            row.style.display = 'none';
+          }
+        });
+
+        // Ocultar sección si no tiene filas visibles
+        if (sectionHasVisibleRows) {
+          section.style.display = '';
+        } else {
+          section.style.display = 'none';
+        }
+      });
+
+      document.getElementById('visibleCount').textContent = visibleCount;
+    }
+
+    searchInput.addEventListener('input', aplicarFiltros);
+    categoryFilter.addEventListener('change', aplicarFiltros);
+  </script>
+</body>
+</html>

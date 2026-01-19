@@ -1,0 +1,63 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}📊 Dashboard{% endblock %}
+
+{% block content %}
+<div class="dashboard-grid">
+  <div class="stat-card">
+    <div class="stat-icon">📦</div>
+    <div class="stat-info">
+      <div class="stat-value">{{ total_productos }}</div>
+      <div class="stat-label">Total Productos</div>
+    </div>
+  </div>
+  
+  <div class="stat-card success">
+    <div class="stat-icon">✅</div>
+    <div class="stat-info">
+      <div class="stat-value">{{ productos_con_stock }}</div>
+      <div class="stat-label">Con Stock</div>
+    </div>
+  </div>
+  
+  <div class="stat-card warning">
+    <div class="stat-icon">⚠️</div>
+    <div class="stat-info">
+      <div class="stat-value">{{ productos_sin_stock }}</div>
+      <div class="stat-label">Sin Stock</div>
+    </div>
+  </div>
+  
+  <div class="stat-card info">
+    <div class="stat-icon">📊</div>
+    <div class="stat-info">
+      <div class="stat-value">{{ stock_total }}</div>
+      <div class="stat-label">Stock Total</div>
+    </div>
+  </div>
+</div>
+
+<div class="dashboard-actions">
+  <h2>Acciones Rápidas</h2>
+  <div class="action-buttons">
+    <a href="{{ url_for('admin_producto_nuevo') }}" class="btn btn-primary">
+      ➕ Agregar Producto
+    </a>
+    <a href="{{ url_for('admin_productos') }}" class="btn btn-secondary">
+      📋 Ver Todos los Productos
+    </a>
+  </div>
+</div>
+
+<div class="info-section">
+  <h2>ℹ️ Información</h2>
+  <p>Desde este panel puedes gestionar todos los productos de tu tienda.</p>
+  <ul>
+    <li>✅ Agregar, editar y eliminar productos</li>
+    <li>📸 Cambiar imágenes de productos</li>
+    <li>💰 Actualizar precios y stock</li>
+    <li>📦 Configurar mínimos y múltiplos de venta</li>
+  </ul>
+</div>
+{% endblock %}

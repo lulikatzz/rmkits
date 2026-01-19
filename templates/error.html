@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Error - RM KITS</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+  <link rel="icon" type="image/ico" href="/static/img/iconorm.ico">
+  <style>
+    .error-container {
+      max-width: 600px;
+      margin: 100px auto;
+      padding: 40px;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+      text-align: center;
+    }
+    .error-container h1 {
+      color: #b71c1c;
+      font-size: 2.5rem;
+      margin-bottom: 20px;
+    }
+    .error-container p {
+      color: #666;
+      font-size: 1.1rem;
+      margin-bottom: 30px;
+    }
+    .error-container a {
+      display: inline-block;
+      padding: 12px 24px;
+      background: #6a1b9a;
+      color: white;
+      text-decoration: none;
+      border-radius: 8px;
+      font-weight: 600;
+      transition: all 0.2s ease;
+    }
+    .error-container a:hover {
+      background: #4a148c;
+      transform: translateY(-2px);
+    }
+  </style>
+</head>
+<body>
+  <div class="error-container">
+    <h1>⚠️ Error</h1>
+    <p>{{ mensaje or "Ha ocurrido un error inesperado. Por favor, intenta nuevamente." }}</p>
+    <a href="/">Volver al inicio</a>
+  </div>
+</body>
+</html>

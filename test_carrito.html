@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Test Sincronización de Precios</title>
+  <style>
+    body { font-family: Arial; padding: 20px; max-width: 800px; margin: 0 auto; }
+    pre { background: #f5f5f5; padding: 15px; border-radius: 8px; overflow-x: auto; }
+    .test { margin: 20px 0; padding: 15px; border: 2px solid #6a1b9a; border-radius: 8px; }
+    button { background: #6a1b9a; color: white; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; margin: 5px; }
+    button:hover { background: #4a148c; }
+  </style>
+</head>
+<body>
+  <h1>🧪 Test de Sincronización de Precios</h1>
+  
+  <div class="test">
+    <h2>1. Carrito en LocalStorage</h2>
+    <button onclick="verCarrito()">Ver Carrito</button>
+    <button onclick="agregarProductoTest()">Agregar Producto Test</button>
+    <button onclick="limpiarCarrito()">Limpiar Carrito</button>
+    <pre id="carrito-output">Click en "Ver Carrito"</pre>
+  </div>
+
+  <div class="test">
+    <h2>2. Productos Actualizados (simulación)</h2>
+    <button onclick="simularProductosActualizados()">Simular Datos del Servidor</button>
+    <pre id="productos-output">Click en "Simular..."</pre>
+  </div>
+
+  <div class="test">
+    <h2>3. Resultado de Sincronización</h2>
+    <button onclick="testSincronizar()">Ejecutar Sincronización</button>
+    <pre id="sync-output">Click en "Ejecutar Sincronización"</pre>
+  </div>
+
+  <script>
+    const STORAGE_KEY = "rmkits_carrito";
+
+    function verCarrito() {
+      const carrito = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+      document.getElementById('carrito-output').textContent = 
+        carrito.length === 0 
+          ? "⚠️ Carrito vacío" 
+          : JSON.stringify(carrito, null, 2);
+    }
+
+    function agregarProductoTest() {
+      const carrito = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+      const producto = {
+        id: 3714,
+        codigo: "TEST001",
+        titulo: "Producto de Prueba",
+        descripcion: "Descripción de prueba",
+        precio: 10000,
+        cantidad: 5,
+        minimo: 5,
+        multiplo: 5,
+        stock: 100,
+        imagen: "test.jpg"
+      };
+      carrito.push(producto);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(carrito));
+      verCarrito();
+      alert("✅ Producto agregado al carrito");
+    }
+
+    function limpiarCarrito() {
+      localStorage.removeItem(STORAGE_KEY);
+      verCarrito();
+      alert("🗑️ Carrito limpiado");
+    }
+
+    function simularProductosActualizados() {
+      window.productosActualizados = {
+        3714: {
+          precio: 15000, // Precio actualizado!
+          stock: 80,
+          minimo: 5,
+          multiplo: 5
+        },
+        3715: {
+          precio: 20000,
+          stock: 50,
+          minimo: 10,
+          multiplo: 10
+        }
+      };
+      document.getElementById('productos-output').textContent = 
+        JSON.stringify(window.productosActualizados, null, 2);
+      alert("✅ Productos actualizados simulados (3714: $15,000)");
+    }
+
+    function testSincronizar() {
+      let output = "";
+      
+      // 1. Obtener carrito
+      let carrito = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+      output += "📦 Carrito original:\n";
+      output += JSON.stringify(carrito, null, 2) + "\n\n";
+
+      // 2. Verificar productos actualizados
+      const productosActualizados = window.productosActualizados || {};
+      output += "🔄 Productos actualizados disponibles:\n";
+      output += JSON.stringify(productosActualizados, null, 2) + "\n\n";
+
+      // 3. Sincronizar
+      let huboActualizacion = false;
+      carrito = carrito.map(item => {
+        const actualizado = productosActualizados[item.id];
+        output += `\n🔍 Revisando producto ID ${item.id}:\n`;
+        output += `   - Precio actual: $${item.precio}\n`;
+        
+        if (actualizado) {
+          output += `   - Precio en BD: $${actualizado.precio}\n`;
+          
+          if (actualizado.precio !== item.precio) {
+            huboActualizacion = true;
+            output += `   ✅ ACTUALIZADO: $${item.precio} → $${actualizado.precio}\n`;
+            return {
+              ...item,
+              precio: actualizado.precio,
+              stock: actualizado.stock,
+              minimo: actualizado.minimo,
+              multiplo: actualizado.multiplo
+            };
+          } else {
+            output += `   ✓ Sin cambios\n`;
+          }
+        } else {
+          output += `   ⚠️ No hay datos actualizados para este producto\n`;
+        }
+        return item;
+      });
+
+      // 4. Resultado
+      output += "\n\n📊 RESULTADO:\n";
+      if (huboActualizacion) {
+        output += "✅ Se actualizaron precios!\n\n";
+        output += "Carrito actualizado:\n";
+        output += JSON.stringify(carrito, null, 2);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(carrito));
+      } else {
+        output += "✓ No hubo cambios de precio\n";
+      }
+
+      document.getElementById('sync-output').textContent = output;
+    }
+
+    // Auto-cargar al inicio
+    window.addEventListener('load', () => {
+      verCarrito();
+    });
+  </script>
+</body>
+</html>

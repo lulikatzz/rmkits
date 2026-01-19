@@ -42,18 +42,9 @@
       </div>
 
       <div id="envio-form" class="envio-form" style="display:none;">
-        
-
         <div class="envio-layout">
-
           <!-- Columna izquierda -->
-          <div id="info-box"  class="envios-box">
-            <!-- <p><strong>CABA:</strong> $6.000</p>
-            <p><strong>Gran Buenos Aires:</strong> $10.000</p>
-            <p><strong>Interior del País:</strong> Se despacha por ViaCargo, el costo del envío se abona al recibir.</p>
-            <p><strong>Plazo:</strong> Se despacha entre 1 y 2 días hábiles luego de recibir el pago.</p>
-            <p><strong>Metodo de pago:</strong> Transferencia Bancaria</p> -->
-          </div>
+          <div id="info-box" class="envios-box"></div>
 
           <!-- Columna derecha -->
           <div id="envio-fields" class="envio-fields">
@@ -63,7 +54,6 @@
             <div class="form-row"><label for="envio-cp">Código Postal *</label><input type="text" id="envio-cp" placeholder="Ej: 1900"></div>
             <div class="form-row"><label for="envio-referencias">Referencias</label><input type="text" id="envio-referencias" placeholder="Opcional"></div>
             <div class="form-row"><label for="envio-nombre-destinatario">Nombre del destinatario *</label><input type="text" id="envio-nombre-destinatario" placeholder="Ej: Juan Perez"></div>
-            <div class="form-row"><label for="envio-telefono-destinatario">Teléfono del destinatario *</label><input type="text" id="envio-telefono-destinatario" placeholder="Ej: 11 3231-3442"></div>
           </div>
         </div>
       </div>
@@ -72,6 +62,7 @@
     <section class="checkout-section">
       <h3>Datos de contacto</h3>
       <div class="form-row"><label>Nombre completo *</label><input type="text" id="contacto-nombre" placeholder="Nombre y apellido"></div>
+      <div class="form-row"><label>Teléfono *</label><input type="tel" id="contacto-telefono" placeholder="11 1234-5678"></div>
       <div class="form-row"><label>Email *</label><input type="email" id="contacto-email" placeholder="tu@email.com"></div>
     </section>
 
@@ -84,323 +75,13 @@
   <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
   <style>.swal2-popup{border-radius:14px!important}</style>
 
+  <!-- Datos del servidor -->
   <script>
-    // Helpers de alertas
-    function alertBox({title="", text="", icon="info", confirmText="Aceptar"} = {}) {
-      return Swal.fire({ title, text, icon, confirmButtonText: confirmText, confirmButtonColor:"#6a1b9a" });
-    }
-    function toast(title, icon="success") {
-      return Swal.fire({ toast:true, position:"top-end", showConfirmButton:false, timer:2000, timerProgressBar:true, title, icon });
-    }
-
-    const STORAGE_KEY = "rmkits_carrito";
-    const WHATSAPP_NUMERO = "5491158573906"; // tu número (sin +, sin 0, sin guiones)
-    let carrito = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-
-    // --- Migración defensiva: asegurar multiplo, minimo y maximo válidos ---
-    let huboMigracion = false;
-    carrito = carrito.map(p => {
-      const nuevo = { ...p };
-
-      if (nuevo.multiplo == null || isNaN(parseInt(nuevo.multiplo,10))) { nuevo.multiplo = 1; huboMigracion = true; }
-      if (nuevo.minimo  == null || isNaN(parseInt(nuevo.minimo ,10)))  { nuevo.minimo  = 1; huboMigracion = true; }
-
-      // maximo puede venir como p.maximo o p.stock (desde index)
-      const rawMax = (nuevo.maximo ?? nuevo.stock ?? null);
-      if (rawMax == null || !(parseInt(rawMax,10) > 0)) {
-        nuevo.maximo = null; // sin tope
-      } else {
-        nuevo.maximo = parseInt(rawMax,10);
-      }
-
-      nuevo.multiplo = parseInt(nuevo.multiplo,10);
-      nuevo.minimo  = parseInt(nuevo.minimo,10);
-      return nuevo;
-    });
-    if (huboMigracion) localStorage.setItem(STORAGE_KEY, JSON.stringify(carrito));
-
-    function formatearMoneda(n) { return `$${n.toLocaleString("es-AR", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`; }
-    function calcularTotal() { return carrito.reduce((sum, p) => sum + p.precio * p.cantidad, 0); }
-    function formatearTotal() {
-      const total = carrito.reduce((sum, p) => sum + p.precio * p.cantidad, 0);
-      return total.toLocaleString("es-AR");
-    }
-
-    function guardar() { localStorage.setItem(STORAGE_KEY, JSON.stringify(carrito)); }
-
-    // ⬇️ Corregir valor según min, max y múltiplo (ceil desde min)
-    function corregirValor(raw, min, step, max) {
-      min  = Math.max(1, parseInt(min, 10) || 1);
-      step = Math.max(1, parseInt(step,10) || 1);
-      max  = (parseInt(max,10) > 0) ? parseInt(max,10) : Infinity;
-
-      let v = parseInt(raw, 10);
-      if (isNaN(v)) return min;
-
-      if (v < min) return min;
-      if (v > max) return max;
-
-      if (step === 1) return v;
-
-      // redondeo hacia ARRIBA al múltiplo desde 'min'
-      let k = Math.ceil((v - min) / step);
-      if (k < 0) k = 0;
-      let w = min + k * step;
-
-      if (w > max) w = max;
-      return w;
-    }
-
-    // Normalizar cada item al cargar
-    function normalizarItem(p) {
-      const multiplo = Math.max(1, parseInt(p.multiplo,10) || 1);
-      const minimo   = Math.max(multiplo, parseInt(p.minimo,10) || multiplo);
-      const maximo   = (Number.isFinite(parseInt(p.maximo,10)) && parseInt(p.maximo,10) > 0) ? parseInt(p.maximo,10) : null;
-
-      const cantOk  = corregirValor(p.cantidad, minimo, multiplo, maximo ?? Infinity);
-      return { ...p, multiplo, minimo, maximo, cantidad: cantOk };
-    }
-
-    carrito = carrito.map(normalizarItem);
-    guardar();
-
-    function renderCarrito() {
-  const cont = document.getElementById("lista-carrito");
-  cont.innerHTML = "";
-
-  if (carrito.length === 0) {
-    cont.innerHTML = "<p>El carrito está vacío.</p>";
-  } else {
-    carrito.forEach((p, idx) => {
-      const step = p.multiplo || 1;
-      const min  = p.minimo  || step || 1;
-      const max  = (p.maximo ?? null);
-
-      const fila = document.createElement("div");
-      fila.className = "cart-item";
-      fila.innerHTML = `
-        <div class="info">
-          <div><strong>${p.titulo}</strong> (${p.codigo})</div>
-          <div>Precio unitario: ${formatearMoneda(p.precio)}</div>
-          <div>
-            Cantidad:
-            <input type="number"
-                   inputmode="numeric" pattern="[0-9]*"
-                   min="${min}"
-                   ${max != null ? `max="${max}"` : ""}
-                   step="${step}"
-                   value="${p.cantidad}"
-                   data-idx="${idx}"
-                   class="cantidad-input">
-            <button data-idx="${idx}" class="quitar-btn">Eliminar</button>
-          </div>
-        </div>
-        <div class="subtotal">Subtotal: ${formatearMoneda(p.precio * p.cantidad)}</div>
-      `;
-      cont.appendChild(fila);
-    });
-  }
-
-  const updateResumen = () => {
-    document.getElementById("total").textContent = formatearMoneda(calcularTotal());
-    document.getElementById("alerta").style.display = calcularTotal() < 200000 ? "block" : "none";
-  };
-  updateResumen();
-
-  // Listeners de cantidad: simple y usable
-  document.querySelectorAll(".cantidad-input").forEach(input => {
-    const idx  = parseInt(input.dataset.idx, 10);
-
-    // Mientras escribe: solo limpiar a dígitos (no corrige aún)
-    input.addEventListener("input", (e) => {
-      const s = e.target.value.replace(/[^\d]/g, "");
-      if (s !== e.target.value) e.target.value = s;
-    });
-
-    // Al salir o confirmar (Enter): corregir min/max/múltiplo
-    const finalizar = () => {
-  const step = carrito[idx].multiplo || 1;
-  const min  = carrito[idx].minimo  || step || 1;
-  const max  = (carrito[idx].maximo ?? Infinity);
-
-  const antes = carrito[idx].cantidad;
-  const nuevo = corregirValor(input.value === "" ? min : input.value, min, step, max);
-
-  // Persistir solo si cambió y mostrar toast
-  if (nuevo !== antes) {
-    carrito[idx].cantidad = nuevo;
-    guardar();
-    toast("Cantidad actualizada", "info"); // 👈 vuelve el avis
-  }
-
-  // Refrescar UI (sin re-render general)
-  input.value = nuevo;
-  input.closest(".cart-item").querySelector(".subtotal").textContent =
-    `Subtotal: ${formatearMoneda(carrito[idx].precio * nuevo)}`;
-  document.getElementById("total").textContent = formatearMoneda(calcularTotal());
-  document.getElementById("alerta").style.display =
-    calcularTotal() < 200000 ? "block" : "none";
-};
-
-    input.addEventListener("blur", finalizar);
-    input.addEventListener("change", finalizar);
-    input.addEventListener("keydown", (e) => {
-      if (["e","E","+","-",".",","].includes(e.key)) e.preventDefault();
-      if (e.key === "Enter") { e.preventDefault(); input.blur(); } // dispara blur -> finalizar
-    });
-  });
-
-  // Quitar producto (confirm)
-  document.querySelectorAll(".quitar-btn").forEach(btn => {
-    btn.addEventListener("click", async (e) => {
-      const idx = parseInt(e.currentTarget.dataset.idx, 10);
-      const res = await Swal.fire({
-        title:"Eliminar producto",
-        text:"¿Querés quitar este producto del carrito?",
-        icon:"question",
-        showCancelButton:true,
-        confirmButtonText:"Quitar",
-        cancelButtonText:"Cancelar",
-        confirmButtonColor:"#6a1b9a",
-        cancelButtonColor:"#9e9e9e"
-      });
-      if (res.isConfirmed) {
-        carrito.splice(idx, 1);
-        guardar();
-        renderCarrito();
-        toast("Producto eliminado", "info");
-      }
-    });
-  });
-}
-
-
-    function emailValido(email) {
-      const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      return re.test(String(email).toLowerCase());
-    }
-    function obtenerEntregaSeleccionada() {
-      const r = document.querySelector('input[name="entrega"]:checked');
-      return r ? r.value : "retiro";
-    }
-
-    function validarFormulario() {
-      const total = calcularTotal();
-      if (total < 200000) {
-        alertBox({ icon:"warning", title:"Pedido mínimo", text:"El pedido debe ser de al menos $200.000 para enviarse." });
-        return false;
-      }
-      const nombre = document.getElementById("contacto-nombre").value.trim();
-      const email = document.getElementById("contacto-email").value.trim();
-      if (!nombre) { alertBox({ icon:"error", title:"Falta información", text:"Ingresá tu nombre completo." }); return false; }
-      if (!email || !emailValido(email)) { alertBox({ icon:"error", title:"Email inválido", text:"Revisá el formato de tu email." }); return false; }
-
-      const entrega = obtenerEntregaSeleccionada();
-      if (entrega === "envio") {
-        const dir = document.getElementById("envio-direccion").value.trim();
-        const loc = document.getElementById("envio-localidad").value.trim();
-        const prov = document.getElementById("envio-provincia").value.trim();
-        const cp = document.getElementById("envio-cp").value.trim();
-        const nombreDest = document.getElementById("envio-nombre-destinatario").value.trim();
-        const TelDest = document.getElementById("envio-telefono-destinatario").value.trim();
-        if (!dir || !loc || !prov || !cp || !nombreDest || !TelDest) {
-          alertBox({ icon:"error", title:"Datos de envío incompletos", text:"Completá dirección, localidad, provincia y código postal." });
-          return false;
-        }
-      }
-      return true;
-    }
-
-    function armarMensajeWhatsApp() {
-      const entrega = obtenerEntregaSeleccionada();
-      const nombre = document.getElementById("contacto-nombre").value.trim();
-      const email = document.getElementById("contacto-email").value.trim();
-
-      const lines = [];
-      lines.push("Pedido mayorista RM KITS:");
-      carrito.forEach(p => lines.push(`${p.titulo} - Cantidad: ${p.cantidad} - Precio unitario: $${p.precio}`));
-      lines.push(`TOTAL: $${formatearTotal()}`);
-      lines.push(""); lines.push("Datos de contacto:"); lines.push(`- Nombre: ${nombre}`); lines.push(`- Email: ${email}`);
-
-      if (entrega === "retiro") {
-        lines.push(""); lines.push("Entrega: Retira en el local");
-      } else {
-        const dir = document.getElementById("envio-direccion").value.trim();
-        const loc = document.getElementById("envio-localidad").value.trim();
-        const prov = document.getElementById("envio-provincia").value.trim();
-        const cp = document.getElementById("envio-cp").value.trim();
-        const nombreDest = document.getElementById("envio-nombre-destinatario").value.trim();
-        const TelDest = document.getElementById("envio-telefono-destinatario").value.trim();
-        const ref = document.getElementById("envio-referencias").value.trim();
-        lines.push(""); lines.push("Entrega: Con envío");
-        lines.push(`- Dirección: ${dir}`); lines.push(`- Localidad: ${loc}`); lines.push(`- Provincia: ${prov}`); lines.push(`- Código Postal: ${cp}`); lines.push(`- Nombre del destinatario: ${nombreDest}`); lines.push(`- Telefono del destinatario: ${TelDest}`);
-        if (ref) lines.push(`- Referencias: ${ref}`);
-      }
-      return encodeURIComponent(lines.join("\n"));
-    }
-
-    // Textos del panel (podés ajustar a gusto)
-    const INFO_RETIRO_HTML = `
-      <p><strong>Retiro en el local</strong></p>
-      <p><strong>Dirección:</strong> Av. Rivadavia 2768, CABA.</p>
-      <p><strong>Horarios:</strong> Lun a Vie 9 a 18 hs. Sáb 9 a 15 hs.</p>
-      <p><strong>Método de pago:</strong> Aceptamos todos los medios de pago.</p>
-    `;
-
-    const INFO_ENVIO_HTML = `
-      <p><strong>Envíos</strong></p>
-      <p><strong>CABA:</strong> $6.000</p>
-      <p><strong>Gran Buenos Aires:</strong> $10.000</p>
-      <p><strong>Interior del País:</strong> Vía ViaCargo (se abona al recibir).</p>
-      <p><strong>Plazo:</strong> Se despacha entre 1 y 2 días hábiles luego de recibir el pago.</p>
-      <p><strong>Método de pago:</strong> Transferencia bancaria.</p>
-    `;
-
-    // Muestra el panel en ambas opciones, cambia el texto y oculta/mostrar los campos de dirección
-    function toggleEnvioForm() {
-      const entrega = obtenerEntregaSeleccionada();
-      const panel = document.getElementById("envio-form");
-      const infoBox = document.getElementById("info-box");
-      const envioFields = document.getElementById("envio-fields");
-
-      // Mostrar el panel siempre que se elija una opción (en tu caso siempre hay una elegida)
-      panel.style.display = "grid";
-
-      if (entrega === "envio") {
-        infoBox.innerHTML = INFO_ENVIO_HTML;
-        envioFields.style.display = "block"; // mostrar campos cuando es envío
-      } else {
-        infoBox.innerHTML = INFO_RETIRO_HTML;
-        envioFields.style.display = "none";  // ocultar campos cuando es retiro
-      }
-    }
-
-    // function toggleEnvioForm() {
-    //   const entrega = obtenerEntregaSeleccionada();
-    //   document.getElementById("envio-form").style.display = entrega === "envio" ? "grid" : "none";
-    // }
-
-    document.addEventListener("DOMContentLoaded", () => {
-      renderCarrito();
-      document.querySelectorAll('input[name="entrega"]').forEach(r => r.addEventListener("change", toggleEnvioForm));
-      toggleEnvioForm();
-
-      document.getElementById("enviar-whatsapp-btn").addEventListener("click", () => {
-        if (!validarFormulario()) return;
-        const mensaje = armarMensajeWhatsApp();
-        const url = `https://wa.me/${WHATSAPP_NUMERO}?text=${mensaje}`;
-        window.open(url, "_blank");
-      });
-    });
-
-    let lastTouchEnd = 0;
-    document.addEventListener('touchend', function (event) {
-      const now = (new Date()).getTime();
-      if (now - lastTouchEnd <= 300) {
-        event.preventDefault(); // evita zoom con doble tap
-      }
-      lastTouchEnd = now;
-    }, false);
+    // Productos actualizados desde el servidor
+    window.productosActualizados = {{ productos_actualizados | tojson }};
   </script>
+
+  <!-- Script principal del carrito -->
+  <script src="/static/js/carrito.js"></script>
 </body>
 </html>

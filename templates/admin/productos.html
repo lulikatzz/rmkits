@@ -1,0 +1,173 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Productos{% endblock %}
+{% block page_title %}📦 Gestión de Productos{% endblock %}
+
+{% block header_actions %}
+<a href="{{ url_for('admin_lista_precios') }}" class="btn btn-secondary" target="_blank">🖨️ Lista de Precios</a>
+<a href="{{ url_for('admin_descargar_excel') }}" class="btn btn-success">📄 Descargar Excel</a>
+<button onclick="document.getElementById('modalSubirExcel').style.display='block'" class="btn btn-info">📤 Subir Excel</button>
+<a href="{{ url_for('admin_producto_nuevo') }}" class="btn btn-primary">➞ Nuevo Producto</a>
+{% endblock %}
+
+{% block content %}
+<div class="table-controls">
+  <div class="controls-left">
+    <input type="text" id="searchInput" placeholder="🔍 Buscar productos..." class="search-input">
+    <select id="categoryFilter" class="category-filter">
+      <option value="">📁 Todas las categorías</option>
+      {% for categoria in categorias %}
+        <option value="{{ categoria }}">{{ categoria }}</option>
+      {% endfor %}
+    </select>
+    <select id="stockFilter" class="stock-filter">
+      <option value="">📦 Todos los stocks</option>
+      <option value="sin-stock">❌ Sin stock (0)</option>
+      <option value="stock-bajo">⚠️ Stock bajo (≤10)</option>
+      <option value="con-stock">✅ Con stock (>0)</option>
+    </select>
+  </div>
+  <span class="table-info">
+    Mostrando: <strong id="visibleCount">{{ productos|length }}</strong> / 
+    Total: <strong id="totalCount">{{ productos|length }}</strong> productos
+  </span>
+</div>
+
+<div class="table-container">
+  <table class="data-table" id="productosTable">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Activo</th>
+        <th>Imagen</th>
+        <th>Código</th>
+        <th>Título</th>
+        <th>Precio</th>
+        <th>Mín</th>
+        <th>Múlt</th>
+        <th>Stock</th>
+        <th>Categoría</th>
+        <th>Acciones</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for producto in productos %}
+      <tr class="{% if not producto.activo %}producto-inactivo{% endif %}">
+        <td>{{ producto.id }}</td>
+        <td>
+          <label class="toggle-switch">
+            <input type="checkbox" class="toggle-activo" data-producto-id="{{ producto.id }}" {% if producto.activo %}checked{% endif %}>
+            <span class="toggle-slider"></span>
+          </label>
+        </td>
+        <td class="img-cell">
+          {% if producto.imagen %}
+            <img src="/static/img/{{ producto.imagen }}" alt="{{ producto.titulo }}" class="product-thumb" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'">
+            <span class="no-image" style="display:none">Sin imagen</span>
+          {% else %}
+            <span class="no-image">Sin imagen</span>
+          {% endif %}
+        </td>
+        <td><code>{{ producto.codigo }}</code></td>
+        <td><strong>{{ producto.titulo }}</strong></td>
+        <td class="price-cell">
+          <span class="price-currency">$</span>
+          <input type="number" class="price-input" data-producto-id="{{ producto.id }}" value="{{ producto.precio }}" min="0" step="1">
+        </td>
+        <td>{{ producto.minimo }}</td>
+        <td>{{ producto.multiplo }}</td>
+        <td>
+          <span class="badge {% if producto.stock > 0 %}badge-success{% else %}badge-danger{% endif %}">
+            {{ producto.stock }}
+          </span>
+        </td>
+        <td>
+          {% if producto.categoria %}
+            <span class="badge badge-info">{{ producto.categoria }}</span>
+          {% else %}
+            <span class="text-muted">-</span>
+          {% endif %}
+        </td>
+        <td class="actions">
+          <a href="{{ url_for('admin_producto_editar', id=producto.id) }}" class="btn btn-sm btn-info" title="Editar">
+            ✏️
+          </a>
+          <button onclick="eliminarProducto({{ producto.id }}, '{{ producto.titulo }}')" class="btn btn-sm btn-danger" title="Eliminar">
+            🗑️
+          </button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if productos|length == 0 %}
+<div class="empty-state">
+  <div class="empty-icon">📦</div>
+  <h3>No hay productos</h3>
+  <p>Comienza agregando tu primer producto</p>
+  <a href="{{ url_for('admin_producto_nuevo') }}" class="btn btn-primary">➕ Agregar Producto</a>
+</div>
+{% endif %}
+
+<!-- Form para eliminar (oculto) -->
+<form id="deleteForm" method="POST" style="display:none;">
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/admin.js"></script>
+<script>
+// Búsqueda en tabla
+document.getElementById('searchInput').addEventListener('input', function(e) {
+  const searchTerm = e.target.value.toLowerCase();
+  const rows = document.querySelectorAll('#productosTable tbody tr');
+  let visibleCount = 0;
+  
+  rows.forEach(row => {
+    const text = row.textContent.toLowerCase();
+    if (text.includes(searchTerm)) {
+      row.style.display = '';
+      visibleCount++;
+    } else {
+      row.style.display = 'none';
+    }
+  });
+  
+  document.getElementById('totalCount').textContent = visibleCount;
+});
+
+// Eliminar producto
+function eliminarProducto(id, titulo) {
+  if (confirm(`¿Estás seguro de eliminar "${titulo}"?\n\nEsta acción no se puede deshacer.`)) {
+    const form = document.getElementById('deleteForm');
+    form.action = `/admin/producto/${id}/eliminar`;
+    form.submit();
+  }
+}
+</script>
+
+<!-- Modal para subir Excel -->
+<div id="modalSubirExcel" class="modal" style="display:none">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>📤 Subir archivo Excel</h2>
+      <span class="modal-close" onclick="document.getElementById('modalSubirExcel').style.display='none'">&times;</span>
+    </div>
+    <div class="modal-body">
+      <form action="{{ url_for('admin_subir_excel') }}" method="POST" enctype="multipart/form-data">
+        <div class="form-group">
+          <label for="archivoExcel">Selecciona el archivo Excel:</label>
+          <input type="file" id="archivoExcel" name="archivo" accept=".xlsx,.xls" required class="file-input">
+          <p class="help-text">⚠️ El archivo debe tener el mismo formato que el descargado. Los productos existentes se actualizarán por ID o código.</p>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('modalSubirExcel').style.display='none'">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Subir y actualizar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

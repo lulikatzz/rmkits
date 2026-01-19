@@ -1,70 +1,202 @@
+"""
+Script para importar productos desde Excel a SQLite
+Uso: python importar_excel.py
+"""
 import pandas as pd
 import sqlite3
 import unicodedata
+import sys
+import os
+from pathlib import Path
+
 
 def normalizar_categoria(s):
+    """
+    Normaliza el nombre de la categoría a un formato estándar
+    """
     if pd.isna(s):
         return ""
+    
     txt = str(s).strip().lower()
-    txt = "".join(c for c in unicodedata.normalize("NFD", txt) if unicodedata.category(c) != "Mn")
+    # Remover acentos
+    txt = "".join(
+        c for c in unicodedata.normalize("NFD", txt) 
+        if unicodedata.category(c) != "Mn"
+    )
+    
+    # Categorías conocidas
     if "jugueteria" in txt or "cotillon" in txt:
         return "jugueteria/cotillon"
     if "libreria" in txt:
         return "libreria"
+    
     return txt
 
+
 def to_int(value, default=0):
+    """Convierte un valor a entero con manejo seguro de errores"""
     if pd.isna(value):
         return default
     try:
         return int(value)
-    except:
+    except (ValueError, TypeError):
         return default
 
-df = pd.read_excel("productos.xlsx")
 
-conn = sqlite3.connect("productos.db")
-cursor = conn.cursor()
+def to_float(value, default=0.0):
+    """Convierte un valor a float con manejo seguro de errores"""
+    if pd.isna(value):
+        return default
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return default
 
-cursor.execute("""
-    CREATE TABLE IF NOT EXISTS producto (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        codigo TEXT,
-        titulo TEXT,
-        descripcion TEXT,
-        precio REAL,
-        minimo INTEGER,
-        multiplo INTEGER,
-        stock INTEGER,
-        imagen TEXT,
-        categoria TEXT
-    )
-""")
 
-try:
-    cursor.execute("ALTER TABLE producto ADD COLUMN categoria TEXT")
-except:
-    pass
-
-cursor.execute("DELETE FROM producto")
-
-for _, row in df.iterrows():
+def crear_tabla(cursor):
+    """Crea la tabla de productos si no existe"""
     cursor.execute("""
-        INSERT INTO producto (codigo, titulo, descripcion, precio, minimo, multiplo, stock, imagen, categoria)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
-        row.get("codigo", ""),
-        row.get("titulo", ""),
-        row.get("descripcion", ""),
-        float(row.get("precio", 0)),
-        to_int(row.get("minimo"), 0),
-        to_int(row.get("multiplo"), 0),
-        to_int(row.get("stock"), 0),
-        row.get("imagen", ""),
-        normalizar_categoria(row.get("categoria", ""))
-    ))
+        CREATE TABLE IF NOT EXISTS producto (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            codigo TEXT NOT NULL,
+            titulo TEXT NOT NULL,
+            descripcion TEXT,
+            precio REAL NOT NULL DEFAULT 0,
+            minimo INTEGER NOT NULL DEFAULT 1,
+            multiplo INTEGER NOT NULL DEFAULT 1,
+            stock INTEGER NOT NULL DEFAULT 0,
+            imagen TEXT,
+            categoria TEXT
+        )
+    """)
+    
+    # Intentar agregar columna categoria si no existe (migración)
+    try:
+        cursor.execute("ALTER TABLE producto ADD COLUMN categoria TEXT")
+    except sqlite3.OperationalError:
+        pass  # La columna ya existe
+    
+    # Intentar agregar columna activo si no existe (migración)
+    try:
+        cursor.execute("ALTER TABLE producto ADD COLUMN activo INTEGER NOT NULL DEFAULT 1")
+    except sqlite3.OperationalError:
+        pass  # La columna ya existe
 
-conn.commit()
-conn.close()
 
-print("✅ Productos importados correctamente con categoría normalizada.")
+def crear_tabla_pedidos(cursor):
+    """Crea la tabla de pedidos si no existe"""
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS pedido (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            cliente_nombre TEXT NOT NULL,
+            cliente_cuit TEXT,
+            cliente_telefono TEXT,
+            cliente_email TEXT,
+            cliente_direccion TEXT,
+            metodo_entrega TEXT,
+            productos TEXT NOT NULL,
+            total REAL NOT NULL,
+            estado TEXT DEFAULT 'pendiente'
+        )
+    """)
+
+
+def importar_productos(archivo_excel="productos.xlsx", archivo_db="productos.db"):
+    """
+    Importa productos desde un archivo Excel a la base de datos SQLite
+    """
+    # Verificar que el archivo Excel existe
+    if not Path(archivo_excel).exists():
+        print(f"❌ Error: No se encuentra el archivo '{archivo_excel}'")
+        return False
+    
+    try:
+        # Leer Excel
+        print(f"📖 Leyendo archivo '{archivo_excel}'...")
+        df = pd.read_excel(archivo_excel)
+        
+        if df.empty:
+            print("⚠️  Advertencia: El archivo Excel está vacío")
+            return False
+        
+        print(f"✓ Se encontraron {len(df)} productos en el archivo")
+        
+        # Conectar a la base de datos
+        print(f"💾 Conectando a la base de datos '{archivo_db}'...")
+        conn = sqlite3.connect(archivo_db)
+        cursor = conn.cursor()
+        
+        # Crear tablas
+        crear_tabla(cursor)
+        crear_tabla_pedidos(cursor)
+        
+        # Limpiar datos anteriores
+        cursor.execute("DELETE FROM producto")
+        print("✓ Tabla limpiada")
+        
+        # Importar productos
+        productos_importados = 0
+        errores = 0
+        
+        for idx, row in df.iterrows():
+            try:
+                codigo = str(row.get("codigo", "")).strip()
+                titulo = str(row.get("titulo", "")).strip()
+                
+                if not codigo or not titulo:
+                    print(f"⚠️  Fila {idx + 2}: Saltada (sin código o título)")
+                    continue
+                
+                cursor.execute("""
+                    INSERT INTO producto 
+                    (codigo, titulo, descripcion, precio, minimo, multiplo, stock, imagen, categoria)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    codigo,
+                    titulo,
+                    str(row.get("descripcion", "")).strip(),
+                    to_float(row.get("precio"), 0),
+                    max(1, to_int(row.get("minimo"), 1)),
+                    max(1, to_int(row.get("multiplo"), 1)),
+                    to_int(row.get("stock"), 0),
+                    str(row.get("imagen", "")).strip(),
+                    normalizar_categoria(row.get("categoria", ""))
+                ))
+                productos_importados += 1
+                
+            except Exception as e:
+                errores += 1
+                print(f"❌ Error en fila {idx + 2}: {e}")
+        
+        # Confirmar cambios
+        conn.commit()
+        conn.close()
+        
+        # Resumen
+        print("\n" + "="*50)
+        print("✅ IMPORTACIÓN COMPLETADA")
+        print(f"   Productos importados: {productos_importados}")
+        if errores > 0:
+            print(f"   Errores: {errores}")
+        print("="*50 + "\n")
+        
+        return True
+        
+    except FileNotFoundError:
+        print(f"❌ Error: No se encuentra el archivo '{archivo_excel}'")
+        return False
+    except pd.errors.EmptyDataError:
+        print("❌ Error: El archivo Excel está vacío o es inválido")
+        return False
+    except Exception as e:
+        print(f"❌ Error inesperado: {e}")
+        return False
+
+
+if __name__ == "__main__":
+    # Permitir especificar archivo desde línea de comandos
+    archivo = sys.argv[1] if len(sys.argv) > 1 else "productos.xlsx"
+    
+    success = importar_productos(archivo)
+    sys.exit(0 if success else 1)

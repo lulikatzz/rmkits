@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Admin{% endblock %} - RM KITS</title>
+  <link rel="stylesheet" href="/static/css/admin.css">
+  <link rel="icon" type="image/ico" href="/static/img/iconorm.ico">
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+  <div class="admin-layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h2>🛍️ RM KITS</h2>
+        <p>Panel Admin</p>
+      </div>
+      
+      <nav class="sidebar-nav">
+        <a href="{{ url_for('admin_dashboard') }}" class="nav-item {% if request.endpoint == 'admin_dashboard' %}active{% endif %}">
+          <span class="icon">📊</span>
+          <span>Dashboard</span>
+        </a>
+        <a href="{{ url_for('admin_productos') }}" class="nav-item {% if 'producto' in request.endpoint %}active{% endif %}">
+          <span class="icon">📦</span>
+          <span>Productos</span>
+        </a>
+        <a href="{{ url_for('admin_pedidos') }}" class="nav-item {% if 'pedido' in request.endpoint %}active{% endif %}">
+          <span class="icon">📝</span>
+          <span>Pedidos</span>
+        </a>
+        <a href="/" target="_blank" class="nav-item">
+          <span class="icon">🏪</span>
+          <span>Ver Tienda</span>
+        </a>
+      </nav>
+      
+      <div class="sidebar-footer">
+        <div class="user-info">
+          <span>👤 {{ session.admin_username }}</span>
+        </div>
+        <a href="{{ url_for('admin_logout') }}" class="btn btn-secondary btn-sm">Cerrar Sesión</a>
+      </div>
+    </aside>
+    
+    <!-- Main Content -->
+    <main class="main-content">
+      <div class="content-header">
+        <h1>{% block page_title %}Dashboard{% endblock %}</h1>
+        {% block header_actions %}{% endblock %}
+      </div>
+      
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          <div class="alerts">
+            {% for category, message in messages %}
+              <div class="alert alert-{{ category }}">
+                {{ message }}
+                <button class="alert-close" onclick="this.parentElement.remove()">×</button>
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      {% endwith %}
+      
+      <div class="content-body">
+        {% block content %}{% endblock %}
+      </div>
+    </main>
+  </div>
+  
+  {% block extra_js %}{% endblock %}
+</body>
+</html>

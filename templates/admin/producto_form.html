@@ -1,0 +1,146 @@
+{% extends "admin/base.html" %}
+
+{% block title %}{{ action }} Producto{% endblock %}
+{% block page_title %}{{ action }} Producto{% endblock %}
+
+{% block header_actions %}
+<a href="{{ url_for('admin_productos') }}" class="btn btn-secondary">← Volver</a>
+{% endblock %}
+
+{% block content %}
+<div class="form-container">
+  <form method="POST" enctype="multipart/form-data" class="product-form">
+    <div class="form-grid">
+      <!-- Columna Izquierda -->
+      <div class="form-section">
+        <h3>Información Básica</h3>
+        
+        <div class="form-group">
+          <label for="codigo">Código *</label>
+          <input type="text" id="codigo" name="codigo" required 
+                 value="{{ producto.codigo if producto else '' }}"
+                 placeholder="Ej: PROD001">
+          <small>Código único del producto</small>
+        </div>
+        
+        <div class="form-group">
+          <label for="titulo">Título *</label>
+          <input type="text" id="titulo" name="titulo" required 
+                 value="{{ producto.titulo if producto else '' }}"
+                 placeholder="Nombre del producto">
+        </div>
+        
+        <div class="form-group">
+          <label for="descripcion">Descripción</label>
+          <textarea id="descripcion" name="descripcion" rows="3"
+                    placeholder="Descripción del producto (opcional)">{{ producto.descripcion if producto else '' }}</textarea>
+        </div>
+        
+        <div class="form-group">
+          <label for="categoria">Categoría</label>
+          <select id="categoria" name="categoria">
+            <option value="">Sin categoría</option>
+            <option value="libreria" {% if producto and producto.categoria == 'libreria' %}selected{% endif %}>Librería</option>
+            <option value="jugueteria/cotillon" {% if producto and producto.categoria == 'jugueteria/cotillon' %}selected{% endif %}>Juguetería/Cotillón</option>
+          </select>
+        </div>
+      </div>
+      
+      <!-- Columna Derecha -->
+      <div class="form-section">
+        <h3>Precios y Stock</h3>
+        
+        <div class="form-group">
+          <label for="precio">Precio *</label>
+          <div class="input-group">
+            <span class="input-prefix">$</span>
+            <input type="number" id="precio" name="precio" required min="0" step="0.01"
+                   value="{{ producto.precio if producto else '' }}"
+                   placeholder="0.00">
+          </div>
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label for="minimo">Mínimo de Compra *</label>
+            <input type="number" id="minimo" name="minimo" required min="1"
+                   value="{{ producto.minimo if producto else '1' }}">
+            <small>Cantidad mínima</small>
+          </div>
+          
+          <div class="form-group">
+            <label for="multiplo">Múltiplo *</label>
+            <input type="number" id="multiplo" name="multiplo" required min="1"
+                   value="{{ producto.multiplo if producto else '1' }}">
+            <small>Se vende de a X unidades</small>
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <label for="stock">Stock *</label>
+          <input type="number" id="stock" name="stock" required min="0"
+                 value="{{ producto.stock if producto else '0' }}">
+          <small>Cantidad disponible</small>
+        </div>
+        
+        <h3 style="margin-top: 20px;">Imagen</h3>
+        
+        {% if producto and producto.imagen %}
+        <div class="current-image">
+          <img src="/static/img/{{ producto.imagen }}" alt="{{ producto.titulo }}">
+          <input type="hidden" name="imagen_actual" value="{{ producto.imagen }}">
+          <p class="text-muted">Imagen actual: {{ producto.imagen }}</p>
+        </div>
+        {% endif %}
+        
+        <div class="form-group">
+          <label for="imagen">{% if producto and producto.imagen %}Cambiar Imagen{% else %}Subir Imagen{% endif %}</label>
+          <input type="file" id="imagen" name="imagen" accept="image/*" onchange="previewImage(this)">
+          <small>Formatos: JPG, PNG, GIF, WEBP (máx 5MB)</small>
+        </div>
+        
+        <div id="imagePreview" class="image-preview"></div>
+      </div>
+    </div>
+    
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary btn-lg">
+        {% if producto %}✅ Guardar Cambios{% else %}➕ Crear Producto{% endif %}
+      </button>
+      <a href="{{ url_for('admin_productos') }}" class="btn btn-secondary btn-lg">Cancelar</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function previewImage(input) {
+  const preview = document.getElementById('imagePreview');
+  preview.innerHTML = '';
+  
+  if (input.files && input.files[0]) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const img = document.createElement('img');
+      img.src = e.target.result;
+      preview.appendChild(img);
+      preview.style.display = 'block';
+    };
+    reader.readAsDataURL(input.files[0]);
+  }
+}
+
+// Validación
+document.querySelector('.product-form').addEventListener('submit', function(e) {
+  const minimo = parseInt(document.getElementById('minimo').value);
+  const multiplo = parseInt(document.getElementById('multiplo').value);
+  
+  if (minimo < multiplo) {
+    alert('El mínimo de compra debe ser mayor o igual al múltiplo');
+    e.preventDefault();
+    return false;
+  }
+});
+</script>
+{% endblock %}
