@@ -684,18 +684,20 @@ def admin_producto_nuevo():
     """Crear nuevo producto"""
     if request.method == "POST":
         try:
+            # Generar código automáticamente primero
+            codigo_automatico = generar_codigo_producto()
+            
             # Manejar imagen
             imagen_filename = ""
             if 'imagen' in request.files:
                 file = request.files['imagen']
                 if file and file.filename and allowed_file(file.filename):
-                    filename = secure_filename(file.filename)
-                    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                    # Obtener la extensión del archivo original
+                    extension = os.path.splitext(file.filename)[1].lower()
+                    # Renombrar con el código del producto
+                    imagen_filename = f"{codigo_automatico}{extension}"
+                    filepath = os.path.join(app.config['UPLOAD_FOLDER'], imagen_filename)
                     file.save(filepath)
-                    imagen_filename = filename
-            
-            # Generar código automáticamente
-            codigo_automatico = generar_codigo_producto()
             
             with get_db_connection() as conn:
                 cursor = conn.cursor()
@@ -746,15 +748,30 @@ def admin_producto_editar(id):
             cursor = conn.cursor()
             
             if request.method == "POST":
+                # Obtener el código del producto
+                codigo_producto = request.form.get('codigo')
+                
                 # Manejar imagen
                 imagen_filename = request.form.get('imagen_actual', '')
                 if 'imagen' in request.files:
                     file = request.files['imagen']
                     if file and file.filename and allowed_file(file.filename):
-                        filename = secure_filename(file.filename)
-                        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                        # Obtener la extensión del archivo original
+                        extension = os.path.splitext(file.filename)[1].lower()
+                        # Renombrar con el código del producto
+                        imagen_filename = f"{codigo_producto}{extension}"
+                        filepath = os.path.join(app.config['UPLOAD_FOLDER'], imagen_filename)
                         file.save(filepath)
-                        imagen_filename = filename
+                        
+                        # Eliminar imagen anterior si existe y es diferente
+                        imagen_anterior = request.form.get('imagen_actual', '')
+                        if imagen_anterior and imagen_anterior != imagen_filename:
+                            ruta_anterior = os.path.join(app.config['UPLOAD_FOLDER'], imagen_anterior)
+                            if os.path.exists(ruta_anterior):
+                                try:
+                                    os.remove(ruta_anterior)
+                                except Exception as e:
+                                    logger.warning(f"No se pudo eliminar la imagen anterior: {e}")
                 
                 cursor.execute("""
                     UPDATE producto 
@@ -928,8 +945,10 @@ def admin_descargar_imagenes_nuevos():
                 imagen_path = os.path.join(app.config['UPLOAD_FOLDER'], imagen)
                 
                 if os.path.exists(imagen_path):
-                    # Agregar archivo al ZIP con nombre descriptivo
-                    nombre_archivo = f"{codigo}_{imagen}"
+                    # Obtener la extensión del archivo
+                    extension = os.path.splitext(imagen)[1].lower()
+                    # Agregar archivo al ZIP con el código del producto como nombre
+                    nombre_archivo = f"{codigo}{extension}"
                     zipf.write(imagen_path, nombre_archivo)
         
         memory_file.seek(0)
