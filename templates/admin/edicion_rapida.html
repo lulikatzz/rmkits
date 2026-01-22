@@ -1,0 +1,603 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Edición Rápida{% endblock %}
+{% block page_title %}📱 Edición Rápida (Móvil){% endblock %}
+
+{% block header_actions %}
+<a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary">← Volver</a>
+{% endblock %}
+
+{% block content %}
+<div class="edicion-rapida-container">
+  
+  <!-- Buscador -->
+  <div class="search-section">
+    <div class="search-box">
+      <input type="text" 
+             id="searchInput" 
+             placeholder="🔍 Buscar por código o nombre..." 
+             autocomplete="off">
+      <button id="clearSearch" class="clear-btn" style="display: none;">✕</button>
+    </div>
+    <p class="search-help">Escribe el código o nombre del producto</p>
+  </div>
+
+  <!-- Resultados de búsqueda -->
+  <div id="searchResults" class="search-results"></div>
+
+  <!-- Mensaje de ayuda inicial -->
+  <div id="initialMessage" class="initial-message">
+    <div class="icon">🔍</div>
+    <h3>Edición Rápida de Productos</h3>
+    <p>Busca un producto por código o nombre para editar su precio y stock rápidamente.</p>
+    <p class="tip">💡 Optimizado para móvil - ideal para cambios rápidos de 1 o 2 productos</p>
+  </div>
+
+  <!-- Formulario de edición (oculto inicialmente) -->
+  <div id="editForm" class="edit-form" style="display: none;">
+    <div class="form-header">
+      <h3 id="editProductTitle"></h3>
+      <button id="closeEdit" class="close-btn">✕</button>
+    </div>
+    
+    <form id="quickEditForm">
+      <input type="hidden" id="productId">
+      
+      <div class="form-group-mobile">
+        <label>Código</label>
+        <input type="text" id="editCodigo" readonly class="readonly-field">
+      </div>
+
+      <div class="form-group-mobile">
+        <label>Precio *</label>
+        <div class="input-with-prefix">
+          <span class="prefix">$</span>
+          <input type="number" id="editPrecio" step="0.01" min="0" required>
+        </div>
+      </div>
+
+      <div class="form-group-mobile">
+        <label>Stock *</label>
+        <input type="number" id="editStock" min="0" required>
+      </div>
+
+      <div class="form-row-mobile">
+        <div class="form-group-mobile">
+          <label>Mínimo</label>
+          <input type="number" id="editMinimo" min="1" value="1">
+        </div>
+        <div class="form-group-mobile">
+          <label>Múltiplo</label>
+          <input type="number" id="editMultiplo" min="1" value="1">
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn-save">💾 Guardar Cambios</button>
+        <button type="button" id="cancelEdit" class="btn-cancel">Cancelar</button>
+      </div>
+    </form>
+
+    <div id="successMessage" class="success-msg" style="display: none;">
+      ✅ Producto actualizado correctamente
+    </div>
+  </div>
+
+</div>
+
+<style>
+/* Mobile-first design */
+.edicion-rapida-container {
+  padding: 10px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+/* Buscador */
+.search-section {
+  margin-bottom: 20px;
+  position: sticky;
+  top: 0;
+  background: white;
+  padding: 15px 0;
+  z-index: 100;
+}
+
+.search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+#searchInput {
+  width: 100%;
+  padding: 16px 50px 16px 20px;
+  font-size: 16px;
+  border: 2px solid #ddd;
+  border-radius: 12px;
+  outline: none;
+  transition: all 0.3s;
+  -webkit-appearance: none;
+}
+
+#searchInput:focus {
+  border-color: #007bff;
+  box-shadow: 0 0 0 3px rgba(0,123,255,0.1);
+}
+
+.clear-btn {
+  position: absolute;
+  right: 15px;
+  background: #dc3545;
+  color: white;
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.search-help {
+  margin: 8px 0 0 0;
+  font-size: 13px;
+  color: #666;
+}
+
+/* Resultados */
+.search-results {
+  margin-bottom: 20px;
+}
+
+.product-card {
+  background: white;
+  border: 2px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 15px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.product-card:active {
+  transform: scale(0.98);
+  background: #f8f9fa;
+}
+
+.product-card-img {
+  width: 60px;
+  height: 60px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.product-card-img.no-image {
+  background: #e9ecef;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+}
+
+.product-card-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.product-code {
+  font-weight: bold;
+  color: #007bff;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.product-title {
+  font-size: 15px;
+  color: #333;
+  margin-bottom: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.product-meta {
+  display: flex;
+  gap: 15px;
+  font-size: 13px;
+  color: #666;
+}
+
+.product-meta span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Mensaje inicial */
+.initial-message {
+  text-align: center;
+  padding: 40px 20px;
+  color: #666;
+}
+
+.initial-message .icon {
+  font-size: 64px;
+  margin-bottom: 20px;
+}
+
+.initial-message h3 {
+  color: #333;
+  margin-bottom: 10px;
+}
+
+.initial-message .tip {
+  background: #fff3cd;
+  padding: 12px;
+  border-radius: 8px;
+  margin-top: 20px;
+  font-size: 14px;
+  color: #856404;
+}
+
+/* Formulario de edición */
+.edit-form {
+  background: white;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.form-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.form-header h3 {
+  margin: 0;
+  font-size: 18px;
+  color: #333;
+}
+
+.close-btn {
+  background: #dc3545;
+  color: white;
+  border: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.form-group-mobile {
+  margin-bottom: 20px;
+}
+
+.form-group-mobile label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: #333;
+  font-size: 14px;
+}
+
+.form-group-mobile input {
+  width: 100%;
+  padding: 14px;
+  font-size: 16px;
+  border: 2px solid #ddd;
+  border-radius: 10px;
+  outline: none;
+  transition: border-color 0.3s;
+  -webkit-appearance: none;
+  box-sizing: border-box;
+}
+
+.form-group-mobile input:focus {
+  border-color: #007bff;
+}
+
+.readonly-field {
+  background-color: #f0f0f0 !important;
+  cursor: not-allowed;
+}
+
+.input-with-prefix {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-with-prefix .prefix {
+  position: absolute;
+  left: 14px;
+  font-weight: bold;
+  color: #666;
+  font-size: 16px;
+  pointer-events: none;
+}
+
+.input-with-prefix input {
+  padding-left: 32px;
+}
+
+.form-row-mobile {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.form-actions {
+  display: grid;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.btn-save,
+.btn-cancel {
+  width: 100%;
+  padding: 16px;
+  font-size: 16px;
+  font-weight: 600;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-save {
+  background: #28a745;
+  color: white;
+}
+
+.btn-save:active {
+  transform: scale(0.98);
+  background: #218838;
+}
+
+.btn-cancel {
+  background: #6c757d;
+  color: white;
+}
+
+.btn-cancel:active {
+  transform: scale(0.98);
+  background: #5a6268;
+}
+
+.success-msg {
+  margin-top: 20px;
+  padding: 16px;
+  background: #d4edda;
+  color: #155724;
+  border-radius: 10px;
+  text-align: center;
+  font-weight: 600;
+  animation: fadeIn 0.3s;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Loading state */
+.loading {
+  text-align: center;
+  padding: 20px;
+  color: #666;
+}
+
+.no-results {
+  text-align: center;
+  padding: 30px;
+  color: #999;
+}
+
+/* Desktop adjustments */
+@media (min-width: 768px) {
+  .edicion-rapida-container {
+    padding: 20px;
+  }
+  
+  .edit-form {
+    max-width: 600px;
+    margin: 0 auto;
+  }
+}
+</style>
+
+<script>
+let searchTimeout;
+const searchInput = document.getElementById('searchInput');
+const clearSearch = document.getElementById('clearSearch');
+const searchResults = document.getElementById('searchResults');
+const initialMessage = document.getElementById('initialMessage');
+const editForm = document.getElementById('editForm');
+const quickEditForm = document.getElementById('quickEditForm');
+
+// Búsqueda con debounce
+searchInput.addEventListener('input', function() {
+  const query = this.value.trim();
+  
+  if (query.length > 0) {
+    clearSearch.style.display = 'block';
+  } else {
+    clearSearch.style.display = 'none';
+    searchResults.innerHTML = '';
+    initialMessage.style.display = 'block';
+    return;
+  }
+  
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => {
+    buscarProductos(query);
+  }, 300);
+});
+
+// Limpiar búsqueda
+clearSearch.addEventListener('click', function() {
+  searchInput.value = '';
+  searchInput.focus();
+  clearSearch.style.display = 'none';
+  searchResults.innerHTML = '';
+  initialMessage.style.display = 'block';
+});
+
+// Función de búsqueda
+async function buscarProductos(query) {
+  initialMessage.style.display = 'none';
+  searchResults.innerHTML = '<div class="loading">🔍 Buscando...</div>';
+  
+  try {
+    const response = await fetch(`/admin/api/buscar-productos?q=${encodeURIComponent(query)}`);
+    const productos = await response.json();
+    
+    if (productos.length === 0) {
+      searchResults.innerHTML = '<div class="no-results">No se encontraron productos</div>';
+      return;
+    }
+    
+    searchResults.innerHTML = productos.map(p => `
+      <div class="product-card" onclick="editarProducto(${p.id})">
+        ${p.imagen ? 
+          `<img src="/static/img/${p.imagen}" class="product-card-img" alt="${p.titulo}">` :
+          `<div class="product-card-img no-image">📦</div>`
+        }
+        <div class="product-card-info">
+          <div class="product-code">${p.codigo}</div>
+          <div class="product-title">${p.titulo}</div>
+          <div class="product-meta">
+            <span>💰 $${parseFloat(p.precio).toLocaleString('es-AR')}</span>
+            <span>📦 ${p.stock}</span>
+          </div>
+        </div>
+      </div>
+    `).join('');
+    
+  } catch (error) {
+    console.error('Error:', error);
+    searchResults.innerHTML = '<div class="no-results">Error al buscar productos</div>';
+  }
+}
+
+// Editar producto
+async function editarProducto(id) {
+  try {
+    const response = await fetch('/admin/api/productos');
+    const productos = await response.json();
+    const producto = productos.find(p => p.id === id);
+    
+    if (!producto) return;
+    
+    // Llenar formulario
+    document.getElementById('productId').value = producto.id;
+    document.getElementById('editProductTitle').textContent = producto.titulo;
+    document.getElementById('editCodigo').value = producto.codigo;
+    document.getElementById('editPrecio').value = producto.precio;
+    document.getElementById('editStock').value = producto.stock;
+    document.getElementById('editMinimo').value = producto.minimo || 1;
+    document.getElementById('editMultiplo').value = producto.multiplo || 1;
+    
+    // Ocultar resultados y mostrar formulario
+    searchResults.style.display = 'none';
+    initialMessage.style.display = 'none';
+    editForm.style.display = 'block';
+    
+    // Scroll al formulario
+    editForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    
+  } catch (error) {
+    console.error('Error:', error);
+    alert('Error al cargar producto');
+  }
+}
+
+// Cerrar formulario
+document.getElementById('closeEdit').addEventListener('click', cerrarFormulario);
+document.getElementById('cancelEdit').addEventListener('click', cerrarFormulario);
+
+function cerrarFormulario() {
+  editForm.style.display = 'none';
+  searchResults.style.display = 'block';
+  document.getElementById('successMessage').style.display = 'none';
+}
+
+// Guardar cambios
+quickEditForm.addEventListener('submit', async function(e) {
+  e.preventDefault();
+  
+  const id = document.getElementById('productId').value;
+  const data = {
+    precio: parseFloat(document.getElementById('editPrecio').value),
+    stock: parseInt(document.getElementById('editStock').value),
+    minimo: parseInt(document.getElementById('editMinimo').value),
+    multiplo: parseInt(document.getElementById('editMultiplo').value)
+  };
+  
+  try {
+    const response = await fetch(`/admin/api/actualizar-producto-rapido/${id}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(data)
+    });
+    
+    const result = await response.json();
+    
+    if (result.success) {
+      // Mostrar mensaje de éxito
+      const successMsg = document.getElementById('successMessage');
+      successMsg.style.display = 'block';
+      
+      // Ocultar después de 2 segundos y volver a búsqueda
+      setTimeout(() => {
+        cerrarFormulario();
+        // Recargar búsqueda si hay texto
+        if (searchInput.value.trim()) {
+          buscarProductos(searchInput.value.trim());
+        }
+      }, 1500);
+    } else {
+      alert('Error: ' + (result.error || 'Error desconocido'));
+    }
+    
+  } catch (error) {
+    console.error('Error:', error);
+    alert('Error al guardar cambios');
+  }
+});
+
+// Enfocar búsqueda al cargar
+searchInput.focus();
+</script>
+
+{% endblock %}

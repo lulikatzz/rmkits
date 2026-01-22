@@ -16,6 +16,8 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill
 from openpyxl import load_workbook
 from io import BytesIO
+import zipfile
+import shutil
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -175,6 +177,64 @@ def internal_error(e):
     logger.error(f"Error 500: {e}")
     return render_template("error.html", mensaje="Error interno del servidor"), 500
 
+
+# =============================================================================
+# FUNCIONES AUXILIARES
+# =============================================================================
+
+def generar_codigo_producto():
+    """Genera el siguiente código de producto automáticamente (formato A0XXX)"""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            # Obtener el último código que empiece con 'A0'
+            cursor.execute("""
+                SELECT codigo FROM producto 
+                WHERE codigo LIKE 'A0%' 
+                ORDER BY CAST(SUBSTR(codigo, 2) AS INTEGER) DESC 
+                LIMIT 1
+            """)
+            result = cursor.fetchone()
+            
+            if result:
+                ultimo_codigo = result['codigo']
+                # Extraer el número del código (A0222 -> 222)
+                numero = int(ultimo_codigo[1:])
+                nuevo_numero = numero + 1
+            else:
+                # Si no hay códigos, empezar desde 1
+                nuevo_numero = 1
+            
+            # Formatear el nuevo código (A0001, A0222, etc)
+            nuevo_codigo = f"A{nuevo_numero:04d}"
+            return nuevo_codigo
+    except Exception as e:
+        logger.error(f"Error al generar código: {e}")
+        return "A0001"
+
+
+def init_database():
+    """Inicializa las tablas necesarias en la base de datos"""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Crear tabla productos_nuevos si no existe
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS producto_nuevo (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    producto_id INTEGER NOT NULL,
+                    fecha_agregado TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (producto_id) REFERENCES producto(id)
+                )
+            """)
+            conn.commit()
+    except Exception as e:
+        logger.error(f"Error al inicializar base de datos: {e}")
+
+
+# Inicializar base de datos al arrancar la app
+init_database()
 
 # =============================================================================
 # PANEL DE ADMINISTRACIÓN
@@ -634,13 +694,16 @@ def admin_producto_nuevo():
                     file.save(filepath)
                     imagen_filename = filename
             
+            # Generar código automáticamente
+            codigo_automatico = generar_codigo_producto()
+            
             with get_db_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
                     INSERT INTO producto (codigo, titulo, descripcion, precio, minimo, multiplo, stock, imagen, categoria, activo)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
-                    request.form.get('codigo'),
+                    codigo_automatico,  # Usar código generado automáticamente
                     request.form.get('titulo'),
                     request.form.get('descripcion', ''),
                     float(request.form.get('precio', 0)),
@@ -651,15 +714,27 @@ def admin_producto_nuevo():
                     request.form.get('categoria', ''),
                     1  # Por defecto activo
                 ))
+                
+                # Obtener el ID del producto recién insertado
+                producto_id = cursor.lastrowid
+                
+                # Agregar a la tabla de productos nuevos
+                cursor.execute("""
+                    INSERT INTO producto_nuevo (producto_id)
+                    VALUES (?)
+                """, (producto_id,))
+                
                 conn.commit()
             
-            flash('Producto creado exitosamente', 'success')
+            flash(f'Producto creado exitosamente con código {codigo_automatico}', 'success')
             return redirect(url_for('admin_productos'))
         except Exception as e:
             logger.error(f"Error al crear producto: {e}")
             flash(f'Error al crear producto: {str(e)}', 'error')
     
-    return render_template("admin/producto_form.html", producto=None, action="Crear")
+    # Generar el código que se usará para el nuevo producto
+    nuevo_codigo = generar_codigo_producto()
+    return render_template("admin/producto_form.html", producto=None, action="Crear", nuevo_codigo=nuevo_codigo)
 
 
 @app.route("/admin/producto/<int:id>/editar", methods=["GET", "POST"])
@@ -801,6 +876,97 @@ def admin_api_productos():
     except Exception as e:
         logger.error(f"Error en API productos: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/admin/productos-nuevos")
+@login_required
+def admin_productos_nuevos():
+    """Muestra la tabla de productos nuevos"""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT p.*, pn.fecha_agregado 
+                FROM producto p
+                INNER JOIN producto_nuevo pn ON p.id = pn.producto_id
+                ORDER BY pn.fecha_agregado DESC
+            """)
+            productos_nuevos = [dict(row) for row in cursor.fetchall()]
+            
+            return render_template("admin/productos_nuevos.html", productos=productos_nuevos)
+    except Exception as e:
+        logger.error(f"Error al obtener productos nuevos: {e}")
+        flash('Error al cargar productos nuevos', 'error')
+        return redirect(url_for('admin_dashboard'))
+
+
+@app.route("/admin/productos-nuevos/descargar-imagenes")
+@login_required
+def admin_descargar_imagenes_nuevos():
+    """Descarga un ZIP con todas las imágenes de productos nuevos"""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT p.codigo, p.imagen 
+                FROM producto p
+                INNER JOIN producto_nuevo pn ON p.id = pn.producto_id
+                WHERE p.imagen IS NOT NULL AND p.imagen != ''
+            """)
+            productos = cursor.fetchall()
+        
+        if not productos:
+            flash('No hay productos nuevos con imágenes', 'warning')
+            return redirect(url_for('admin_productos_nuevos'))
+        
+        # Crear un archivo ZIP en memoria
+        memory_file = BytesIO()
+        with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for producto in productos:
+                codigo = producto['codigo']
+                imagen = producto['imagen']
+                imagen_path = os.path.join(app.config['UPLOAD_FOLDER'], imagen)
+                
+                if os.path.exists(imagen_path):
+                    # Agregar archivo al ZIP con nombre descriptivo
+                    nombre_archivo = f"{codigo}_{imagen}"
+                    zipf.write(imagen_path, nombre_archivo)
+        
+        memory_file.seek(0)
+        
+        # Generar nombre del archivo con fecha
+        fecha_actual = datetime.now().strftime("%Y%m%d_%H%M%S")
+        nombre_zip = f"imagenes_productos_nuevos_{fecha_actual}.zip"
+        
+        return send_file(
+            memory_file,
+            mimetype='application/zip',
+            as_attachment=True,
+            download_name=nombre_zip
+        )
+    
+    except Exception as e:
+        logger.error(f"Error al descargar imágenes: {e}")
+        flash(f'Error al descargar imágenes: {str(e)}', 'error')
+        return redirect(url_for('admin_productos_nuevos'))
+
+
+@app.route("/admin/productos-nuevos/<int:id>/quitar", methods=["POST"])
+@login_required
+def admin_quitar_producto_nuevo(id):
+    """Quita un producto de la tabla de productos nuevos"""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM producto_nuevo WHERE producto_id = ?", (id,))
+            conn.commit()
+        
+        flash('Producto quitado de la lista de nuevos', 'success')
+    except Exception as e:
+        logger.error(f"Error al quitar producto nuevo: {e}")
+        flash(f'Error: {str(e)}', 'error')
+    
+    return redirect(url_for('admin_productos_nuevos'))
 
 
 if __name__ == "__main__":

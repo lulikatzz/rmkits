@@ -22,9 +22,13 @@
           <span class="icon">📊</span>
           <span>Dashboard</span>
         </a>
-        <a href="{{ url_for('admin_productos') }}" class="nav-item {% if 'producto' in request.endpoint %}active{% endif %}">
+        <a href="{{ url_for('admin_productos') }}" class="nav-item {% if request.endpoint == 'admin_productos' %}active{% endif %}">
           <span class="icon">📦</span>
           <span>Productos</span>
+        </a>
+        <a href="{{ url_for('admin_productos_nuevos') }}" class="nav-item {% if request.endpoint == 'admin_productos_nuevos' %}active{% endif %}">
+          <span class="icon">🆕</span>
+          <span>Productos Nuevos</span>
         </a>
         <a href="{{ url_for('admin_pedidos') }}" class="nav-item {% if 'pedido' in request.endpoint %}active{% endif %}">
           <span class="icon">📝</span>

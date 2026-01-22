@@ -17,10 +17,17 @@
         
         <div class="form-group">
           <label for="codigo">Código *</label>
+          {% if producto %}
           <input type="text" id="codigo" name="codigo" required 
-                 value="{{ producto.codigo if producto else '' }}"
+                 value="{{ producto.codigo }}"
                  placeholder="Ej: PROD001">
-          <small>Código único del producto</small>
+          {% else %}
+          <input type="text" id="codigo" name="codigo" readonly 
+                 value="{{ nuevo_codigo }}"
+                 style="background-color: #f0f0f0; cursor: not-allowed;"
+                 placeholder="Ej: PROD001">
+          {% endif %}
+          <small>{% if producto %}Código del producto{% else %}Código generado automáticamente{% endif %}</small>
         </div>
         
         <div class="form-group">

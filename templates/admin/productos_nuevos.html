@@ -1,0 +1,175 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Productos Nuevos{% endblock %}
+{% block page_title %}Productos Nuevos{% endblock %}
+
+{% block header_actions %}
+<a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary">← Volver</a>
+{% if productos|length > 0 %}
+<a href="{{ url_for('admin_descargar_imagenes_nuevos') }}" class="btn btn-success">
+  📥 Descargar Imágenes
+</a>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="productos-nuevos-container">
+  {% if productos|length == 0 %}
+  <div class="alert alert-info">
+    <p>No hay productos nuevos registrados.</p>
+    <p>Los productos creados desde el panel de administración aparecerán aquí.</p>
+  </div>
+  {% else %}
+  <div class="table-info">
+    <p><strong>Total de productos nuevos:</strong> {{ productos|length }}</p>
+    <p class="text-muted">Esta tabla muestra los productos agregados manualmente desde el panel de administración.</p>
+  </div>
+
+  <div class="table-responsive">
+    <table class="productos-table">
+      <thead>
+        <tr>
+          <th>Imagen</th>
+          <th>Código</th>
+          <th>Título</th>
+          <th>Precio</th>
+          <th>Stock</th>
+          <th>Categoría</th>
+          <th>Fecha Agregado</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for producto in productos %}
+        <tr>
+          <td>
+            {% if producto.imagen %}
+            <img src="/static/img/{{ producto.imagen }}" alt="{{ producto.titulo }}" 
+                 style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px;">
+            {% else %}
+            <div style="width: 50px; height: 50px; background: #f0f0f0; border-radius: 4px; display: flex; align-items: center; justify-content: center;">
+              <span style="color: #999;">Sin imagen</span>
+            </div>
+            {% endif %}
+          </td>
+          <td><strong>{{ producto.codigo }}</strong></td>
+          <td>{{ producto.titulo }}</td>
+          <td>${{ "{:,.0f}".format(producto.precio) }}</td>
+          <td>{{ producto.stock }}</td>
+          <td>{{ producto.categoria or '-' }}</td>
+          <td>{{ producto.fecha_agregado[:16] }}</td>
+          <td>
+            <div class="btn-group">
+              <a href="{{ url_for('admin_producto_editar', id=producto.id) }}" 
+                 class="btn btn-sm btn-primary" title="Editar">
+                ✏️ Editar
+              </a>
+              <form method="POST" action="{{ url_for('admin_quitar_producto_nuevo', id=producto.id) }}" 
+                    style="display: inline;"
+                    onsubmit="return confirm('¿Quitar este producto de la lista de nuevos?');">
+                <button type="submit" class="btn btn-sm btn-warning" title="Quitar de nuevos">
+                  ❌ Quitar
+                </button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="download-info">
+    <p class="text-muted">
+      💡 <strong>Tip:</strong> Puedes descargar todas las imágenes de estos productos haciendo clic en el botón "Descargar Imágenes" arriba.
+      Se descargará un archivo ZIP con todas las imágenes nombradas por código de producto.
+    </p>
+  </div>
+  {% endif %}
+</div>
+
+<style>
+.productos-nuevos-container {
+  padding: 20px;
+}
+
+.table-info {
+  background: #f8f9fa;
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.table-info p {
+  margin: 5px 0;
+}
+
+.alert {
+  padding: 20px;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.alert-info {
+  background-color: #d1ecf1;
+  border: 1px solid #bee5eb;
+  color: #0c5460;
+}
+
+.table-responsive {
+  overflow-x: auto;
+  margin-bottom: 20px;
+}
+
+.productos-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.productos-table thead {
+  background: #007bff;
+  color: white;
+}
+
+.productos-table th,
+.productos-table td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid #ddd;
+}
+
+.productos-table tbody tr:hover {
+  background-color: #f8f9fa;
+}
+
+.productos-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.btn-group {
+  display: flex;
+  gap: 5px;
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 14px;
+}
+
+.download-info {
+  background: #fff3cd;
+  padding: 15px;
+  border-radius: 8px;
+  border: 1px solid #ffc107;
+}
+
+.text-muted {
+  color: #6c757d;
+  font-size: 14px;
+}
+</style>
+{% endblock %}

@@ -102,6 +102,18 @@ def crear_tabla_pedidos(cursor):
     """)
 
 
+def crear_tabla_productos_nuevos(cursor):
+    """Crea la tabla de productos nuevos si no existe"""
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS producto_nuevo (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            producto_id INTEGER NOT NULL,
+            fecha_agregado TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (producto_id) REFERENCES producto(id)
+        )
+    """)
+
+
 def importar_productos(archivo_excel="productos.xlsx", archivo_db="productos.db"):
     """
     Importa productos desde un archivo Excel a la base de datos SQLite
@@ -130,6 +142,7 @@ def importar_productos(archivo_excel="productos.xlsx", archivo_db="productos.db"
         # Crear tablas
         crear_tabla(cursor)
         crear_tabla_pedidos(cursor)
+        crear_tabla_productos_nuevos(cursor)
         
         # Limpiar datos anteriores
         cursor.execute("DELETE FROM producto")
