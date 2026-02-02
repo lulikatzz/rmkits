@@ -696,7 +696,7 @@ document.addEventListener("DOMContentLoaded", () => {
     
     // Generar URL de WhatsApp
     const mensaje = armarMensajeWhatsApp();
-    const whatsappURL = `https://api.whatsapp.com/send?phone=${WHATSAPP_NUMERO}&text=${mensaje}`;
+    const whatsappURL = `https://wa.me/${WHATSAPP_NUMERO}?text=${mensaje}`;
     
     // Abrir WhatsApp directamente
     window.location.href = whatsappURL;
