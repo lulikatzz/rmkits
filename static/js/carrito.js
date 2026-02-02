@@ -625,46 +625,64 @@ document.addEventListener("DOMContentLoaded", () => {
   toggleEnvioForm();
 
   // Botón de enviar a WhatsApp
-  document.getElementById("enviar-whatsapp-btn").addEventListener("click", () => {
-    if (!validarFormulario()) return;
+  document.getElementById("enviar-whatsapp-btn").addEventListener("click", (event) => {
+    // Validación rápida del total
+    const total = calcularTotal();
+    if (total < 200000) {
+      alert("El pedido debe ser de al menos $200.000 para enviarse.");
+      return false;
+    }
+
+    // Validación rápida de campos requeridos
+    const nombre = document.getElementById("contacto-nombre").value.trim();
+    const telefono = document.getElementById("contacto-telefono").value.trim();
     
-    // Preparar URL de WhatsApp INMEDIATAMENTE (antes de cualquier async)
+    if (!nombre) {
+      alert("Por favor ingresá tu nombre completo.");
+      return false;
+    }
+    
+    if (!telefono) {
+      alert("Por favor ingresá tu teléfono.");
+      return false;
+    }
+
+    // Verificar si es envío y validar esos campos
+    const metodoEntrega = document.querySelector('input[name="entrega"]:checked')?.value || 'retiro';
+    if (metodoEntrega === 'envio') {
+      const dir = document.getElementById("envio-direccion")?.value.trim() || '';
+      const loc = document.getElementById("envio-localidad")?.value.trim() || '';
+      const prov = document.getElementById("envio-provincia")?.value.trim() || '';
+      const cp = document.getElementById("envio-cp")?.value.trim() || '';
+      const nombreDest = document.getElementById("envio-nombre-destinatario")?.value.trim() || '';
+      
+      if (!dir || !loc || !prov || !cp || !nombreDest) {
+        alert("Por favor completá todos los campos requeridos de envío.");
+        return false;
+      }
+    }
+    
+    // PREPARAR URL DE WHATSAPP INMEDIATAMENTE
     const mensaje = armarMensajeWhatsApp();
-    const url = `https://wa.me/${WHATSAPP_NUMERO}?text=${mensaje}`;
+    const numeroWhatsApp = WHATSAPP_NUMERO;
+    const whatsappURL = `https://api.whatsapp.com/send?phone=${numeroWhatsApp}&text=${mensaje}`;
     
     // Detectar iOS
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
     
-    // Obtener datos del formulario
-    const getNombre = () => {
-      const el = document.getElementById("contacto-nombre");
-      return el ? el.value : '';
-    };
-    const getTelefono = () => {
-      const el = document.getElementById("contacto-telefono");
-      return el ? el.value : '';
-    };
-    const getEmail = () => {
-      const el = document.getElementById("contacto-email");
-      return el ? el.value : '';
-    };
-    const getMetodoEntrega = () => {
-      const el = document.querySelector('input[name="entrega"]:checked');
-      return el ? el.value : 'retiro';
-    };
-    
-    // Preparar datos del cliente
+    // Preparar datos para guardar (sin await)
+    const email = document.getElementById("contacto-email")?.value.trim() || '';
     const datosCliente = {
-      nombre: getNombre(),
-      telefono: getTelefono(),
-      email: getEmail(),
-      metodo_entrega: getMetodoEntrega(),
+      nombre: nombre,
+      telefono: telefono,
+      email: email,
+      metodo_entrega: metodoEntrega,
       productos: JSON.stringify(carrito),
-      total: calcularTotal()
+      total: total
     };
     
     // Si es envío, agregar datos de envío
-    if (getMetodoEntrega() === 'envio') {
+    if (metodoEntrega === 'envio') {
       datosCliente.envio_direccion = document.getElementById('envio-direccion')?.value.trim() || '';
       datosCliente.envio_localidad = document.getElementById('envio-localidad')?.value.trim() || '';
       datosCliente.envio_provincia = document.getElementById('envio-provincia')?.value.trim() || '';
@@ -673,34 +691,23 @@ document.addEventListener("DOMContentLoaded", () => {
       datosCliente.envio_referencias = document.getElementById('envio-referencias')?.value.trim() || '';
     }
     
-    // ABRIR WHATSAPP INMEDIATAMENTE (sin esperar nada asíncrono)
-    if (isIOS) {
-      // En iOS, usar window.location.href es más confiable
-      window.location.href = url;
-    } else {
-      // En Android y otros, window.open funciona bien
-      window.open(url, "_blank");
-    }
+    // Guardar pedido en segundo plano ANTES de abrir WhatsApp
+    // Usamos navigator.sendBeacon para garantizar que se envíe incluso si la página se cierra
+    const blob = new Blob([JSON.stringify(datosCliente)], { type: 'application/json' });
+    navigator.sendBeacon('/guardar-pedido', blob);
     
-    // Guardar pedido en segundo plano (no bloquea la apertura de WhatsApp)
-    fetch('/guardar-pedido', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(datosCliente)
-    })
-    .then(response => response.json())
-    .then(result => {
-      if (result.success) {
-        console.log('✅ Pedido guardado con ID:', result.pedido_id);
-      } else {
-        console.warn('⚠️ Error al guardar pedido:', result.error);
+    // ABRIR WHATSAPP - Diferente estrategia según plataforma
+    if (isIOS) {
+      // En iOS: redirigir directamente en la misma ventana
+      window.location.href = whatsappURL;
+    } else {
+      // En Android/Desktop: abrir en nueva pestaña
+      const newWindow = window.open(whatsappURL, '_blank');
+      if (!newWindow) {
+        // Si el popup fue bloqueado, redirigir en la misma ventana
+        window.location.href = whatsappURL;
       }
-    })
-    .catch(error => {
-      console.error('❌ Error al guardar pedido:', error);
-    });
+    }
   });
 
   // Prevenir zoom con doble tap en móviles
