@@ -627,7 +627,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Botón de enviar a WhatsApp
   const btnWhatsApp = document.getElementById("enviar-whatsapp-btn");
   
-  btnWhatsApp.addEventListener("click", async function(e) {
+  btnWhatsApp.addEventListener("click", function(e) {
     e.preventDefault();
     
     // Validación del total
@@ -686,54 +686,20 @@ document.addEventListener("DOMContentLoaded", () => {
       datosCliente.envio_referencias = document.getElementById('envio-referencias')?.value.trim() || '';
     }
     
-    // PASO 1: Guardar pedido y obtener ID (usando fetch en lugar de sendBeacon)
-    let pedidoId = null;
+    // Guardar pedido en segundo plano
     try {
-      const response = await fetch('/guardar-pedido', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(datosCliente)
-      });
-      
-      const result = await response.json();
-      if (result.success) {
-        pedidoId = result.pedido_id;
-        console.log('✅ Pedido guardado con ID:', pedidoId);
-      }
+      const blob = new Blob([JSON.stringify(datosCliente)], { type: 'application/json' });
+      navigator.sendBeacon('/guardar-pedido', blob);
     } catch(err) {
       console.warn('Error al guardar pedido:', err);
     }
     
-    // PASO 2: Crear mensaje CORTO para WhatsApp (mejor para iOS)
-    const mensajeCorto = 
-      `🛒 Pedido mayorista RM KITS\n` +
-      `\n` +
-      `👤 ${nombre}\n` +
-      `📞 ${telefono}\n` +
-      `💰 Total: $${formatearTotal()}\n` +
-      `📦 Entrega: ${metodoEntrega === 'envio' ? 'Con envío' : 'Retiro en local'}\n` +
-      (pedidoId ? `🆔 Pedido #${pedidoId}\n` : '') +
-      `\n` +
-      `Cantidad de productos: ${carrito.length}`;
+    // Generar URL de WhatsApp y abrir
+    const mensaje = armarMensajeWhatsApp();
+    const whatsappURL = `https://wa.me/${WHATSAPP_NUMERO}?text=${mensaje}`;
     
-    const mensajeEncoded = encodeURIComponent(mensajeCorto);
-    const whatsappURL = `https://wa.me/${WHATSAPP_NUMERO}?text=${mensajeEncoded}`;
-    
-    // PASO 3: Abrir WhatsApp usando método compatible con iOS
-    // Crear un <a> real y hacer click (más confiable que window.location.href)
-    const link = document.createElement('a');
-    link.href = whatsappURL;
-    link.target = '_blank';
-    link.rel = 'noopener noreferrer';
-    document.body.appendChild(link);
-    link.click();
-    
-    // Limpiar después de 100ms
-    setTimeout(() => {
-      document.body.removeChild(link);
-    }, 100);
+    // Abrir WhatsApp
+    window.location.href = whatsappURL;
   });
 
   // Prevenir zoom con doble tap en móviles
