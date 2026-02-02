@@ -625,27 +625,17 @@ document.addEventListener("DOMContentLoaded", () => {
   toggleEnvioForm();
 
   // Botón de enviar a WhatsApp
-  document.getElementById("enviar-whatsapp-btn").addEventListener("click", async () => {
+  document.getElementById("enviar-whatsapp-btn").addEventListener("click", () => {
     if (!validarFormulario()) return;
     
-    // Función para abrir WhatsApp (compatible con iOS y Android)
-    const abrirWhatsApp = () => {
-      const mensaje = armarMensajeWhatsApp();
-      const url = `https://wa.me/${WHATSAPP_NUMERO}?text=${mensaje}`;
-      
-      // Detectar iOS
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-      
-      if (isIOS) {
-        // En iOS, usar window.location.href es más confiable
-        window.location.href = url;
-      } else {
-        // En Android y otros, window.open funciona bien
-        window.open(url, "_blank");
-      }
-    };
+    // Preparar URL de WhatsApp INMEDIATAMENTE (antes de cualquier async)
+    const mensaje = armarMensajeWhatsApp();
+    const url = `https://wa.me/${WHATSAPP_NUMERO}?text=${mensaje}`;
     
-    // Intentar guardar el pedido en la base de datos primero
+    // Detectar iOS
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    
+    // Obtener datos del formulario
     const getNombre = () => {
       const el = document.getElementById("contacto-nombre");
       return el ? el.value : '';
@@ -683,28 +673,34 @@ document.addEventListener("DOMContentLoaded", () => {
       datosCliente.envio_referencias = document.getElementById('envio-referencias')?.value.trim() || '';
     }
     
-    try {
-      const response = await fetch('/guardar-pedido', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(datosCliente)
-      });
-      
-      const result = await response.json();
-      
+    // ABRIR WHATSAPP INMEDIATAMENTE (sin esperar nada asíncrono)
+    if (isIOS) {
+      // En iOS, usar window.location.href es más confiable
+      window.location.href = url;
+    } else {
+      // En Android y otros, window.open funciona bien
+      window.open(url, "_blank");
+    }
+    
+    // Guardar pedido en segundo plano (no bloquea la apertura de WhatsApp)
+    fetch('/guardar-pedido', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(datosCliente)
+    })
+    .then(response => response.json())
+    .then(result => {
       if (result.success) {
         console.log('✅ Pedido guardado con ID:', result.pedido_id);
       } else {
         console.warn('⚠️ Error al guardar pedido:', result.error);
       }
-    } catch (error) {
+    })
+    .catch(error => {
       console.error('❌ Error al guardar pedido:', error);
-    }
-    
-    // Siempre abrir WhatsApp, independientemente de si se guardó o no
-    abrirWhatsApp();
+    });
   });
 
   // Prevenir zoom con doble tap en móviles
