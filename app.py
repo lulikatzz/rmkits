@@ -8,6 +8,7 @@ import sqlite3
 import urllib.parse
 import logging
 import os
+import json
 from contextlib import contextmanager
 from functools import wraps
 from datetime import datetime
@@ -538,6 +539,269 @@ def admin_pedidos():
         return redirect(url_for('admin_dashboard'))
 
 
+@app.route("/admin/pedidos/exportar")
+@login_required
+def admin_exportar_pedidos():
+    """Exportar pedidos a Excel"""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM pedido ORDER BY fecha DESC")
+            pedidos = [dict(row) for row in cursor.fetchall()]
+        
+        # Crear archivo Excel
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Pedidos"
+        
+        # Estilos
+        header_fill = PatternFill(start_color="6a1b9a", end_color="6a1b9a", fill_type="solid")
+        header_font = Font(color="FFFFFF", bold=True, size=12)
+        header_alignment = Alignment(horizontal="center", vertical="center")
+        
+        # Encabezados
+        headers = [
+            "ID", "Fecha", "Cliente", "CUIT", "Teléfono", "Email", 
+            "Método Entrega", "Dirección Envío", "Localidad", "Provincia", 
+            "CP", "Destinatario", "Referencias", "Total", "Estado"
+        ]
+        
+        for col_num, header in enumerate(headers, 1):
+            cell = ws.cell(row=1, column=col_num)
+            cell.value = header
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = header_alignment
+        
+        # Datos
+        for row_num, pedido in enumerate(pedidos, 2):
+            ws.cell(row=row_num, column=1, value=pedido.get('id', ''))
+            
+            # Formatear fecha
+            fecha = pedido.get('fecha', '')
+            if fecha:
+                try:
+                    fecha_obj = datetime.strptime(fecha, '%Y-%m-%d %H:%M:%S')
+                    fecha = fecha_obj.strftime('%d/%m/%Y %H:%M')
+                except:
+                    pass
+            ws.cell(row=row_num, column=2, value=fecha)
+            
+            ws.cell(row=row_num, column=3, value=pedido.get('cliente_nombre', ''))
+            ws.cell(row=row_num, column=4, value=pedido.get('cliente_cuit', ''))
+            ws.cell(row=row_num, column=5, value=pedido.get('cliente_telefono', ''))
+            ws.cell(row=row_num, column=6, value=pedido.get('cliente_email', ''))
+            ws.cell(row=row_num, column=7, value=pedido.get('metodo_entrega', ''))
+            ws.cell(row=row_num, column=8, value=pedido.get('envio_direccion', ''))
+            ws.cell(row=row_num, column=9, value=pedido.get('envio_localidad', ''))
+            ws.cell(row=row_num, column=10, value=pedido.get('envio_provincia', ''))
+            ws.cell(row=row_num, column=11, value=pedido.get('envio_cp', ''))
+            ws.cell(row=row_num, column=12, value=pedido.get('envio_nombre_destinatario', ''))
+            ws.cell(row=row_num, column=13, value=pedido.get('envio_referencias', ''))
+            
+            # Total como número
+            total = pedido.get('total', 0)
+            ws.cell(row=row_num, column=14, value=total)
+            
+            ws.cell(row=row_num, column=15, value=pedido.get('estado', 'pendiente'))
+        
+        # Ajustar ancho de columnas
+        ws.column_dimensions['A'].width = 8
+        ws.column_dimensions['B'].width = 18
+        ws.column_dimensions['C'].width = 25
+        ws.column_dimensions['D'].width = 15
+        ws.column_dimensions['E'].width = 15
+        ws.column_dimensions['F'].width = 30
+        ws.column_dimensions['G'].width = 15
+        ws.column_dimensions['H'].width = 35
+        ws.column_dimensions['I'].width = 20
+        ws.column_dimensions['J'].width = 15
+        ws.column_dimensions['K'].width = 10
+        ws.column_dimensions['L'].width = 25
+        ws.column_dimensions['M'].width = 30
+        ws.column_dimensions['N'].width = 12
+        ws.column_dimensions['O'].width = 12
+        
+        # Crear una segunda hoja con detalles de productos
+        ws_detalle = wb.create_sheet(title="Detalle Productos")
+        
+        # Encabezados para la hoja de detalles
+        detail_headers = ["Pedido ID", "Fecha", "Cliente", "Código", "Producto", "Cantidad", "Precio Unit.", "Subtotal"]
+        for col_num, header in enumerate(detail_headers, 1):
+            cell = ws_detalle.cell(row=1, column=col_num)
+            cell.value = header
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = header_alignment
+        
+        # Agregar detalles de productos
+        detail_row = 2
+        for pedido in pedidos:
+            try:
+                import json
+                productos = json.loads(pedido.get('productos', '[]'))
+                for prod in productos:
+                    ws_detalle.cell(row=detail_row, column=1, value=pedido.get('id', ''))
+                    
+                    # Fecha
+                    fecha = pedido.get('fecha', '')
+                    if fecha:
+                        try:
+                            fecha_obj = datetime.strptime(fecha, '%Y-%m-%d %H:%M:%S')
+                            fecha = fecha_obj.strftime('%d/%m/%Y')
+                        except:
+                            pass
+                    ws_detalle.cell(row=detail_row, column=2, value=fecha)
+                    
+                    ws_detalle.cell(row=detail_row, column=3, value=pedido.get('cliente_nombre', ''))
+                    ws_detalle.cell(row=detail_row, column=4, value=prod.get('codigo', ''))
+                    ws_detalle.cell(row=detail_row, column=5, value=prod.get('titulo', ''))
+                    ws_detalle.cell(row=detail_row, column=6, value=prod.get('cantidad', 0))
+                    ws_detalle.cell(row=detail_row, column=7, value=prod.get('precio', 0))
+                    ws_detalle.cell(row=detail_row, column=8, value=prod.get('cantidad', 0) * prod.get('precio', 0))
+                    detail_row += 1
+            except:
+                pass
+        
+        # Ajustar ancho de columnas de detalle
+        ws_detalle.column_dimensions['A'].width = 10
+        ws_detalle.column_dimensions['B'].width = 12
+        ws_detalle.column_dimensions['C'].width = 25
+        ws_detalle.column_dimensions['D'].width = 12
+        ws_detalle.column_dimensions['E'].width = 40
+        ws_detalle.column_dimensions['F'].width = 10
+        ws_detalle.column_dimensions['G'].width = 12
+        ws_detalle.column_dimensions['H'].width = 12
+        
+        # Guardar en memoria
+        output = BytesIO()
+        wb.save(output)
+        output.seek(0)
+        
+        # Generar nombre de archivo con fecha
+        fecha_actual = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f"pedidos_rmkits_{fecha_actual}.xlsx"
+        
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=filename
+        )
+        
+    except Exception as e:
+        logger.error(f"Error al exportar pedidos: {e}")
+        flash('Error al exportar pedidos', 'error')
+        return redirect(url_for('admin_pedidos'))
+
+
+@app.route("/admin/pedido/<int:id>/eliminar", methods=["POST"])
+@login_required
+def admin_eliminar_pedido(id):
+    """Eliminar un pedido individual"""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM pedido WHERE id = ?", (id,))
+            conn.commit()
+            
+            if cursor.rowcount > 0:
+                return jsonify({'success': True})
+            else:
+                return jsonify({'success': False, 'error': 'Pedido no encontrado'}), 404
+    except Exception as e:
+        logger.error(f"Error al eliminar pedido: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route("/admin/pedidos/importar", methods=["POST"])
+@login_required
+def admin_importar_pedidos():
+    """Importar pedidos desde archivo Excel"""
+    try:
+        if 'archivo' not in request.files:
+            flash('No se seleccionó archivo', 'error')
+            return redirect(url_for('admin_pedidos'))
+        
+        file = request.files['archivo']
+        if file.filename == '':
+            flash('No se seleccionó archivo', 'error')
+            return redirect(url_for('admin_pedidos'))
+        
+        if not file.filename.endswith(('.xlsx', '.xls')):
+            flash('El archivo debe ser Excel (.xlsx o .xls)', 'error')
+            return redirect(url_for('admin_pedidos'))
+        
+        # Leer archivo Excel
+        wb = load_workbook(file)
+        ws = wb.active
+        
+        pedidos_importados = 0
+        
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Leer desde la fila 2 (la 1 son encabezados)
+            for row in ws.iter_rows(min_row=2, values_only=True):
+                # Verificar que la fila tenga datos
+                if not row[0]:  # Si no hay ID, saltar
+                    continue
+                
+                # Extraer datos de la fila
+                # [ID, Fecha, Cliente, CUIT, Teléfono, Email, Método Entrega, Dirección Envío, 
+                #  Localidad, Provincia, CP, Destinatario, Referencias, Total, Estado]
+                
+                fecha_str = row[1] if row[1] else datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                if isinstance(fecha_str, datetime):
+                    fecha_str = fecha_str.strftime('%Y-%m-%d %H:%M:%S')
+                elif isinstance(fecha_str, str):
+                    # Intentar parsear si es string en formato dd/mm/yyyy
+                    try:
+                        fecha_obj = datetime.strptime(fecha_str, '%d/%m/%Y %H:%M')
+                        fecha_str = fecha_obj.strftime('%Y-%m-%d %H:%M:%S')
+                    except:
+                        try:
+                            fecha_obj = datetime.strptime(fecha_str, '%d/%m/%Y')
+                            fecha_str = fecha_obj.strftime('%Y-%m-%d %H:%M:%S')
+                        except:
+                            fecha_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                
+                cursor.execute("""
+                    INSERT INTO pedido (fecha, cliente_nombre, cliente_cuit, cliente_telefono, 
+                                       cliente_email, metodo_entrega, envio_direccion, envio_localidad,
+                                       envio_provincia, envio_cp, envio_nombre_destinatario, 
+                                       envio_referencias, productos, total, estado)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    fecha_str,
+                    row[2] if row[2] else '',  # cliente_nombre
+                    row[3] if row[3] else '',  # cliente_cuit
+                    row[4] if row[4] else '',  # cliente_telefono
+                    row[5] if row[5] else '',  # cliente_email
+                    row[6] if row[6] else 'retiro',  # metodo_entrega
+                    row[7] if row[7] else '',  # envio_direccion
+                    row[8] if row[8] else '',  # envio_localidad
+                    row[9] if row[9] else '',  # envio_provincia
+                    row[10] if row[10] else '',  # envio_cp
+                    row[11] if row[11] else '',  # envio_nombre_destinatario
+                    row[12] if row[12] else '',  # envio_referencias
+                    '[]',  # productos vacío por defecto
+                    row[13] if row[13] else 0,  # total
+                    row[14] if row[14] else 'pendiente'  # estado
+                ))
+                pedidos_importados += 1
+            
+            conn.commit()
+        
+        flash(f'✅ {pedidos_importados} pedido(s) importado(s) correctamente', 'success')
+        return redirect(url_for('admin_pedidos'))
+        
+    except Exception as e:
+        logger.error(f"Error al importar pedidos: {e}")
+        flash(f'Error al importar pedidos: {str(e)}', 'error')
+        return redirect(url_for('admin_pedidos'))
+
+
 @app.route("/admin/pedido/<int:id>/estado", methods=["POST"])
 @login_required
 def admin_pedido_estado(id):
@@ -546,7 +810,7 @@ def admin_pedido_estado(id):
         data = request.get_json()
         nuevo_estado = data.get('estado')
         
-        estados_validos = ['pendiente', 'procesando', 'completado', 'cancelado']
+        estados_validos = ['pendiente', 'recibido', 'confirmado', 'preparando', 'enviado', 'en-transito', 'entregado', 'pagado', 'completado', 'cancelado']
         if nuevo_estado not in estados_validos:
             return jsonify({'success': False, 'error': 'Estado inválido'}), 400
         

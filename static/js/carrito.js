@@ -628,11 +628,21 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("enviar-whatsapp-btn").addEventListener("click", async () => {
     if (!validarFormulario()) return;
     
-    // Función para abrir WhatsApp
+    // Función para abrir WhatsApp (compatible con iOS y Android)
     const abrirWhatsApp = () => {
       const mensaje = armarMensajeWhatsApp();
       const url = `https://wa.me/${WHATSAPP_NUMERO}?text=${mensaje}`;
-      window.open(url, "_blank");
+      
+      // Detectar iOS
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+      
+      if (isIOS) {
+        // En iOS, usar window.location.href es más confiable
+        window.location.href = url;
+      } else {
+        // En Android y otros, window.open funciona bien
+        window.open(url, "_blank");
+      }
     };
     
     // Intentar guardar el pedido en la base de datos primero

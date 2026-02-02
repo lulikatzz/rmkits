@@ -3,6 +3,10 @@
 {% block title %}Pedidos{% endblock %}
 {% block page_title %}📝 Gestión de Pedidos{% endblock %}
 
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
+{% endblock %}
+
 {% block content %}
 <div class="pedidos-container">
   <!-- Estadísticas -->
@@ -21,12 +25,28 @@
     </div>
   </div>
 
-  {% if pedidos|length > 0 %}
   <div class="actions-bar">
-    <button onclick="limpiarPedidos()" class="btn-danger-mobile">
-      🗑️ Limpiar Pedidos
+    {% if pedidos|length > 0 %}
+    <a href="{{ url_for('admin_exportar_pedidos') }}" class="btn-success-mobile" style="text-decoration: none;">
+      📥 Exportar a Excel
+    </a>
+    {% endif %}
+    <button onclick="document.getElementById('importarExcel').click()" class="btn-primary-mobile">
+      📤 Importar desde Excel
     </button>
+    {% if pedidos|length > 0 %}
+    <button onclick="limpiarPedidos()" class="btn-danger-mobile">
+      🗑️ Limpiar Todos
+    </button>
+    {% endif %}
   </div>
+  
+  <!-- Input oculto para importar archivo -->
+  <form id="formImportar" action="{{ url_for('admin_importar_pedidos') }}" method="POST" enctype="multipart/form-data" style="display: none;">
+    <input type="file" id="importarExcel" name="archivo" accept=".xlsx,.xls" onchange="confirmarImportar()">
+  </form>
+  
+  {% if pedidos|length > 0 %}
 
   <!-- Vista Desktop: Tabla -->
   <div class="desktop-view">
@@ -62,6 +82,9 @@
               </button>
               <button onclick="cambiarEstado({{ pedido.id }}, '{{ pedido.estado }}')" class="btn btn-sm btn-success" title="Cambiar estado">
                 ✓
+              </button>
+              <button onclick="eliminarPedido({{ pedido.id }})" class="btn btn-sm btn-danger" title="Eliminar">
+                🗑️
               </button>
             </td>
           </tr>
@@ -110,6 +133,9 @@
         </button>
         <button onclick="cambiarEstado({{ pedido.id }}, '{{ pedido.estado }}')" class="btn-action btn-success">
           ✓ Estado
+        </button>
+        <button onclick="eliminarPedido({{ pedido.id }})" class="btn-action btn-danger">
+          🗑️ Eliminar
         </button>
       </div>
     </div>
@@ -211,25 +237,124 @@ function cerrarModal() {
 }
 
 function cambiarEstado(id, estadoActual) {
-  const estados = ['pendiente', 'procesando', 'completado', 'cancelado'];
-  const estadoActualIndex = estados.indexOf(estadoActual);
-  const nuevoEstado = estados[(estadoActualIndex + 1) % estados.length];
+  const estados = [
+    { value: 'pendiente', label: '⏳ Pendiente', color: '#ffc107' },
+    { value: 'recibido', label: '📨 Recibido', color: '#17a2b8' },
+    { value: 'confirmado', label: '✅ Confirmado', color: '#20c997' },
+    { value: 'preparando', label: '📦 Preparando', color: '#6f42c1' },
+    { value: 'enviado', label: '🚚 Enviado', color: '#fd7e14' },
+    { value: 'en-transito', label: '🛣️ En Tránsito', color: '#0dcaf0' },
+    { value: 'entregado', label: '🏠 Entregado', color: '#198754' },
+    { value: 'pagado', label: '💰 Pagado', color: '#28a745' },
+    { value: 'completado', label: '✔️ Completado', color: '#28a745' },
+    { value: 'cancelado', label: '❌ Cancelado', color: '#dc3545' }
+  ];
   
-  if (confirm(`¿Cambiar estado a "${nuevoEstado}"?`)) {
-    fetch(`/admin/pedido/${id}/estado`, {
+  // Crear modal con selector de estados
+  let html = '<div style="text-align: left; padding: 20px;">';
+  html += '<h3 style="margin-bottom: 20px; color: #333;">Selecciona el nuevo estado:</h3>';
+  html += '<div style="display: grid; gap: 10px;">';
+  
+  estados.forEach(estado => {
+    const esActual = estado.value === estadoActual;
+    html += `
+      <button 
+        onclick="aplicarEstado(${id}, '${estado.value}')" 
+        style="
+          padding: 15px;
+          border: ${esActual ? '3px solid ' + estado.color : '2px solid #e0e0e0'};
+          background: ${esActual ? estado.color + '20' : 'white'};
+          border-radius: 8px;
+          cursor: pointer;
+          font-size: 16px;
+          font-weight: ${esActual ? 'bold' : 'normal'};
+          text-align: left;
+          transition: all 0.2s;
+          color: #333;
+        "
+        onmouseover="this.style.background='${estado.color}20'; this.style.borderColor='${estado.color}';"
+        onmouseout="this.style.background='${esActual ? estado.color + '20' : 'white'}'; this.style.borderColor='${esActual ? estado.color : '#e0e0e0'}';"
+      >
+        ${estado.label} ${esActual ? '(Actual)' : ''}
+      </button>
+    `;
+  });
+  
+  html += '</div></div>';
+  
+  Swal.fire({
+    title: 'Cambiar Estado del Pedido',
+    html: html,
+    showConfirmButton: false,
+    showCloseButton: true,
+    width: '500px'
+  });
+}
+
+function aplicarEstado(id, nuevoEstado) {
+  Swal.close();
+  
+  fetch(`/admin/pedido/${id}/estado`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ estado: nuevoEstado })
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.success) {
+      Swal.fire({
+        icon: 'success',
+        title: '✅ Estado actualizado',
+        showConfirmButton: false,
+        timer: 1500
+      }).then(() => {
+        location.reload();
+      });
+    } else {
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: data.error || 'Error al cambiar estado'
+      });
+    }
+  })
+  .catch(error => {
+    Swal.fire({
+      icon: 'error',
+      title: 'Error',
+      text: error.message
+    });
+  });
+}
+
+function eliminarPedido(id) {
+  if (confirm('⚠️ ¿Eliminar este pedido? No se puede deshacer.')) {
+    fetch(`/admin/pedido/${id}/eliminar`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ estado: nuevoEstado })
+      headers: { 'Content-Type': 'application/json' }
     })
     .then(response => response.json())
     .then(data => {
       if (data.success) {
+        alert('✅ Pedido eliminado');
         location.reload();
       } else {
-        alert('Error al cambiar estado');
+        alert('❌ Error: ' + data.error);
       }
     })
-    .catch(error => alert('Error: ' + error.message));
+    .catch(error => alert('❌ Error: ' + error.message));
+  }
+}
+
+function confirmarImportar() {
+  const input = document.getElementById('importarExcel');
+  if (input.files.length > 0) {
+    const fileName = input.files[0].name;
+    if (confirm(`¿Importar pedidos desde "${fileName}"?`)) {
+      document.getElementById('formImportar').submit();
+    } else {
+      input.value = ''; // Limpiar selección
+    }
   }
 }
 
@@ -296,6 +421,50 @@ document.addEventListener('keydown', function(e) {
 .actions-bar {
   margin-bottom: 20px;
   text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+}
+
+.btn-primary-mobile {
+  background: #007bff;
+  color: white;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  max-width: 300px;
+  display: inline-block;
+  text-align: center;
+}
+
+.btn-primary-mobile:active {
+  transform: scale(0.98);
+  background: #0056b3;
+}
+
+.btn-success-mobile {
+  background: #28a745;
+  color: white;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  max-width: 300px;
+  display: inline-block;
+  text-align: center;
+}
+
+.btn-success-mobile:active {
+  transform: scale(0.98);
+  background: #218838;
 }
 
 .btn-danger-mobile {
@@ -391,7 +560,7 @@ document.addEventListener('keydown', function(e) {
 
 .card-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 0;
   border-top: 1px solid #e0e0e0;
 }
@@ -423,6 +592,10 @@ document.addEventListener('keydown', function(e) {
   color: #28a745;
 }
 
+.btn-action.btn-danger {
+  color: #dc3545;
+}
+
 /* Badges */
 .badge {
   padding: 6px 12px;
@@ -437,9 +610,39 @@ document.addEventListener('keydown', function(e) {
   color: #856404;
 }
 
-.badge-procesando {
+.badge-recibido {
   background: #d1ecf1;
   color: #0c5460;
+}
+
+.badge-confirmado {
+  background: #d1f2eb;
+  color: #0c5460;
+}
+
+.badge-preparando {
+  background: #e2d9f3;
+  color: #59359a;
+}
+
+.badge-enviado {
+  background: #ffe5d0;
+  color: #984c0c;
+}
+
+.badge-en-transito {
+  background: #cff4fc;
+  color: #055160;
+}
+
+.badge-entregado {
+  background: #d1e7dd;
+  color: #0a3622;
+}
+
+.badge-pagado {
+  background: #d4edda;
+  color: #155724;
 }
 
 .badge-completado {
@@ -678,9 +881,12 @@ document.addEventListener('keydown', function(e) {
   
   .actions-bar {
     text-align: right;
+    flex-direction: row;
+    justify-content: flex-end;
   }
   
-  .btn-danger-mobile {
+  .btn-danger-mobile,
+  .btn-success-mobile {
     width: auto;
   }
   
@@ -739,6 +945,15 @@ document.addEventListener('keydown', function(e) {
     color: white;
   }
   
+  .btn-danger {
+    background: #dc3545;
+    color: white;
+  }
+  
+  .btn-primary-mobile {
+    width: auto;
+  }
+  
   .modal-content {
     max-width: 700px;
   }
@@ -748,4 +963,6 @@ document.addEventListener('keydown', function(e) {
   }
 }
 </style>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 {% endblock %}
