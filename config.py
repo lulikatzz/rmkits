@@ -44,3 +44,11 @@ class Config:
     UPLOAD_FOLDER = os.path.join('static', 'img')
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
     MAX_CONTENT_LENGTH = 5 * 1024 * 1024  # 5MB máximo
+    
+    # Email
+    MAIL_SERVER = os.environ.get('MAIL_SERVER') or 'smtp.gmail.com'
+    MAIL_PORT = int(os.environ.get('MAIL_PORT') or 587)
+    MAIL_USE_TLS = True
+    MAIL_USERNAME = os.environ.get('MAIL_USERNAME') or 'tu_email@gmail.com'
+    MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD') or 'tu_password'
+    MAIL_DEFAULT_SENDER = os.environ.get('MAIL_DEFAULT_SENDER') or 'RM KITS <tu_email@gmail.com>'

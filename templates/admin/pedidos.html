@@ -171,6 +171,20 @@ function verDetallePedido(id, pedido) {
     const productos = JSON.parse(pedido.productos);
     let html = '<div class="pedido-detalle">';
     
+    // Botón para copiar al portapapeles
+    html += '<div style="text-align: right; margin-bottom: 15px;">';
+    html += `<button onclick="copiarPedidoWhatsApp(${id}, ${pedido.id}, '${pedido.cliente_nombre.replace(/'/g, "\\'")}', '${pedido.cliente_telefono}', '${pedido.metodo_entrega || 'retiro'}', ${JSON.stringify(productos).replace(/"/g, '&quot;')}, ${pedido.total}`;
+    
+    // Agregar datos de envío si existen
+    if (pedido.metodo_entrega === 'envio' && pedido.envio_direccion) {
+      html += `, '${(pedido.envio_nombre_destinatario || '').replace(/'/g, "\\'")}', '${(pedido.envio_direccion || '').replace(/'/g, "\\'")}', '${(pedido.envio_localidad || '').replace(/'/g, "\\'")}', '${(pedido.envio_provincia || '').replace(/'/g, "\\'")}', '${(pedido.envio_cp || '').replace(/'/g, "\\'")}', '${(pedido.envio_referencias || '').replace(/'/g, "\\'")}'`;
+    } else {
+      html += `, '', '', '', '', '', ''`;
+    }
+    
+    html += `)" class="btn btn-success" style="padding: 10px 20px; font-size: 14px; margin-bottom: 10px;">`;
+    html += '📋 Copiar para WhatsApp</button></div>';
+    
     // Información del cliente
     html += '<div class="detalle-section">';
     html += '<h3>📋 Datos del Cliente</h3>';
@@ -374,6 +388,86 @@ function limpiarPedidos() {
       }
     })
     .catch(error => alert('❌ Error: ' + error.message));
+  }
+}
+
+function copiarPedidoWhatsApp(idInterno, pedidoNum, nombre, telefono, metodoEntrega, productos, total, envioNombre, envioDireccion, envioLocalidad, envioProvincia, envioCP, envioReferencias) {
+  try {
+    // Generar mensaje para WhatsApp
+    let mensaje = `📦 *PEDIDO #${pedidoNum}*\n`;
+    mensaje += `━━━━━━━━━━━━━━━━━━\n\n`;
+    
+    // Datos del cliente
+    mensaje += `👤 *Cliente:* ${nombre}\n`;
+    mensaje += `📞 *Teléfono:* ${telefono}\n`;
+    mensaje += `\n`;
+    
+    // Método de entrega
+    if (metodoEntrega === 'envio' && envioDireccion) {
+      mensaje += `📦 *ENVÍO A DOMICILIO*\n`;
+      mensaje += `━━━━━━━━━━━━━━━━━━\n`;
+      if (envioNombre && envioNombre !== nombre) {
+        mensaje += `Destinatario: ${envioNombre}\n`;
+      }
+      mensaje += `Dirección: ${envioDireccion}\n`;
+      mensaje += `Localidad: ${envioLocalidad}\n`;
+      mensaje += `Provincia: ${envioProvincia}\n`;
+      mensaje += `CP: ${envioCP}\n`;
+      if (envioReferencias) {
+        mensaje += `Referencias: ${envioReferencias}\n`;
+      }
+    } else {
+      mensaje += `🏪 *RETIRA EN LOCAL*\n`;
+      mensaje += `Av. Rivadavia 2768, CABA\n`;
+    }
+    mensaje += `\n`;
+    
+    // Productos
+    mensaje += `🛒 *PRODUCTOS:*\n`;
+    mensaje += `━━━━━━━━━━━━━━━━━━\n`;
+    productos.forEach(p => {
+      const subtotal = p.precio * p.cantidad;
+      mensaje += `\n${p.codigo} - ${p.titulo}\n`;
+      mensaje += `   Cantidad: ${p.cantidad}\n`;
+      mensaje += `   Precio unitario: $${p.precio.toLocaleString('es-AR')}\n`;
+      mensaje += `   Subtotal: $${subtotal.toLocaleString('es-AR')}\n`;
+    });
+    
+    mensaje += `\n━━━━━━━━━━━━━━━━━━\n`;
+    mensaje += `💰 *TOTAL: $${total.toLocaleString('es-AR')}*\n`;
+    mensaje += `━━━━━━━━━━━━━━━━━━\n`;
+    
+    // Copiar al portapapeles
+    navigator.clipboard.writeText(mensaje).then(() => {
+      Swal.fire({
+        icon: 'success',
+        title: '¡Copiado!',
+        text: 'El pedido se copió al portapapeles. Ahora podés pegarlo en WhatsApp.',
+        confirmButtonText: 'OK',
+        timer: 2000
+      });
+    }).catch(err => {
+      // Fallback para navegadores antiguos
+      const textarea = document.createElement('textarea');
+      textarea.value = mensaje;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      
+      Swal.fire({
+        icon: 'success',
+        title: '¡Copiado!',
+        text: 'El pedido se copió al portapapeles.',
+        confirmButtonText: 'OK',
+        timer: 2000
+      });
+    });
+  } catch (error) {
+    console.error('Error al copiar:', error);
+    alert('Error al copiar el pedido: ' + error.message);
   }
 }
 

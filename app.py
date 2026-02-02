@@ -19,6 +19,9 @@ from openpyxl import load_workbook
 from io import BytesIO
 import zipfile
 import shutil
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -166,6 +169,117 @@ def enviar_pedido():
         return jsonify({"error": "Error al procesar el pedido"}), 500
 
 
+def enviar_email_confirmacion(pedido_id, cliente_nombre, cliente_email, productos_json, total, metodo_entrega, datos_envio=None):
+    """Envía email de confirmación de pedido al cliente"""
+    try:
+        # Si no hay email configurado o el cliente no proporcionó email, no enviar
+        if not cliente_email or not Config.MAIL_USERNAME or Config.MAIL_USERNAME == 'tu_email@gmail.com':
+            logger.info("Email no configurado o cliente sin email, saltando envío")
+            return
+        
+        # Parsear productos
+        productos = json.loads(productos_json) if isinstance(productos_json, str) else productos_json
+        
+        # Crear mensaje
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = f'Confirmación de Pedido #{pedido_id} - RM KITS'
+        msg['From'] = Config.MAIL_DEFAULT_SENDER
+        msg['To'] = cliente_email
+        
+        # Construir el cuerpo del email en HTML
+        html = f"""
+        <html>
+          <head>
+            <style>
+              body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+              .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+              .header {{ background-color: #6a1b9a; color: white; padding: 20px; text-align: center; }}
+              .content {{ padding: 20px; background-color: #f9f9f9; }}
+              .pedido-info {{ background-color: white; padding: 15px; margin: 15px 0; border-left: 4px solid #6a1b9a; }}
+              .producto {{ padding: 10px; border-bottom: 1px solid #eee; }}
+              .total {{ font-size: 1.3em; font-weight: bold; color: #6a1b9a; margin-top: 20px; padding: 15px; background-color: #f0e6f6; text-align: right; }}
+              .footer {{ text-align: center; padding: 20px; color: #666; font-size: 0.9em; }}
+            </style>
+          </head>
+          <body>
+            <div class="container">
+              <div class="header">
+                <h1>¡Gracias por tu pedido!</h1>
+              </div>
+              
+              <div class="content">
+                <p>Hola <strong>{cliente_nombre}</strong>,</p>
+                
+                <p>Hemos recibido tu pedido correctamente. En breve nos comunicaremos con vos para confirmar los detalles y coordinar la entrega.</p>
+                
+                <div class="pedido-info">
+                  <h3>📋 Número de Pedido: #{pedido_id}</h3>
+                  <p><strong>Método de entrega:</strong> {metodo_entrega.replace('retiro', 'Retiro en local').replace('envio', 'Envío a domicilio')}</p>
+        """
+        
+        # Agregar datos de envío si aplica
+        if metodo_entrega == 'envio' and datos_envio:
+            html += f"""
+                  <p><strong>Dirección de envío:</strong><br>
+                  {datos_envio.get('direccion', '')}<br>
+                  {datos_envio.get('localidad', '')}, {datos_envio.get('provincia', '')}<br>
+                  CP: {datos_envio.get('cp', '')}</p>
+            """
+        
+        html += """
+                </div>
+                
+                <h3>🛒 Productos:</h3>
+        """
+        
+        # Listar productos
+        for p in productos:
+            subtotal = p['precio'] * p['cantidad']
+            html += f"""
+                <div class="producto">
+                  <strong>{p['codigo']} - {p['titulo']}</strong><br>
+                  Cantidad: {p['cantidad']} × ${p['precio']:,.0f} = ${subtotal:,.0f}
+                </div>
+            """
+        
+        html += f"""
+                <div class="total">
+                  TOTAL: ${total:,.0f}
+                </div>
+                
+                <p style="margin-top: 20px;">Si tenés alguna consulta, podés comunicarte con nosotros:</p>
+                <ul>
+                  <li><strong>WhatsApp:</strong> +54 9 11 5857-3906</li>
+                  <li><strong>Dirección:</strong> Av. Rivadavia 2768, CABA</li>
+                </ul>
+              </div>
+              
+              <div class="footer">
+                <p>Este es un email automático, por favor no respondas a este mensaje.</p>
+                <p>© {datetime.now().year} RM KITS - Todos los derechos reservados</p>
+              </div>
+            </div>
+          </body>
+        </html>
+        """
+        
+        # Adjuntar HTML
+        part = MIMEText(html, 'html')
+        msg.attach(part)
+        
+        # Enviar email
+        with smtplib.SMTP(Config.MAIL_SERVER, Config.MAIL_PORT) as server:
+            server.starttls()
+            server.login(Config.MAIL_USERNAME, Config.MAIL_PASSWORD)
+            server.send_message(msg)
+        
+        logger.info(f"Email de confirmación enviado a {cliente_email}")
+        
+    except Exception as e:
+        logger.error(f"Error al enviar email de confirmación: {e}")
+        # No lanzar error para no interrumpir el flujo del pedido
+
+
 @app.errorhandler(404)
 def page_not_found(e):
     """Página no encontrada"""
@@ -182,6 +296,23 @@ def internal_error(e):
 # =============================================================================
 # FUNCIONES AUXILIARES
 # =============================================================================
+
+def buscar_imagen_para_codigo(codigo):
+    """
+    Busca si existe una imagen para el código dado en la carpeta static/img.
+    Retorna el nombre del archivo si existe, o string vacío si no.
+    """
+    extensiones = ['.jpg', '.jpeg', '.png', '.webp', '.gif']
+    img_folder = Config.UPLOAD_FOLDER
+    
+    for ext in extensiones:
+        img_filename = f"{codigo}{ext}"
+        img_path = os.path.join(img_folder, img_filename)
+        if os.path.exists(img_path):
+            return img_filename
+    
+    return ""
+
 
 def generar_codigo_producto():
     """Genera el siguiente código de producto automáticamente (formato A0XXX)"""
@@ -229,6 +360,44 @@ def init_database():
                     FOREIGN KEY (producto_id) REFERENCES producto(id)
                 )
             """)
+            
+            # Crear tabla pedidos si no existe
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS pedido (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    cliente_nombre TEXT NOT NULL,
+                    cliente_cuit TEXT,
+                    cliente_telefono TEXT,
+                    cliente_email TEXT,
+                    cliente_direccion TEXT,
+                    metodo_entrega TEXT,
+                    envio_direccion TEXT,
+                    envio_localidad TEXT,
+                    envio_provincia TEXT,
+                    envio_cp TEXT,
+                    envio_nombre_destinatario TEXT,
+                    envio_referencias TEXT,
+                    productos TEXT NOT NULL,
+                    total REAL NOT NULL,
+                    estado TEXT DEFAULT 'pendiente'
+                )
+            """)
+            
+            # Verificar si hay pedidos existentes
+            cursor.execute("SELECT COUNT(*) as count FROM pedido")
+            count = cursor.fetchone()[0]
+            
+            # Si no hay pedidos, configurar el AUTOINCREMENT para empezar en 1200
+            if count == 0:
+                cursor.execute("INSERT OR REPLACE INTO sqlite_sequence (name, seq) VALUES ('pedido', 1199)")
+            else:
+                # Si ya hay pedidos, verificar que el próximo ID sea al menos 1200
+                cursor.execute("SELECT MAX(id) as max_id FROM pedido")
+                max_id = cursor.fetchone()[0]
+                if max_id is None or max_id < 1199:
+                    cursor.execute("INSERT OR REPLACE INTO sqlite_sequence (name, seq) VALUES ('pedido', 1199)")
+            
             conn.commit()
     except Exception as e:
         logger.error(f"Error al inicializar base de datos: {e}")
@@ -476,10 +645,12 @@ def admin_subir_excel():
                             productos_actualizados += 1
                         else:
                             # Crear nuevo producto con ID específico
+                            # Buscar imagen automáticamente si no está en el Excel
+                            imagen_auto = buscar_imagen_para_codigo(codigo)
                             cursor.execute("""
                                 INSERT INTO producto (id, codigo, titulo, descripcion, precio, minimo, multiplo, stock, imagen, categoria, activo)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?)
-                            """, (id_producto, codigo, titulo, descripcion, precio, minimo, multiplo, stock, categoria, activo))
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """, (id_producto, codigo, titulo, descripcion, precio, minimo, multiplo, stock, imagen_auto, categoria, activo))
                             productos_creados += 1
                     else:
                         # Buscar por código si no hay ID
@@ -496,10 +667,12 @@ def admin_subir_excel():
                             productos_actualizados += 1
                         else:
                             # Crear nuevo producto
+                            # Buscar imagen automáticamente si no está en el Excel
+                            imagen_auto = buscar_imagen_para_codigo(codigo)
                             cursor.execute("""
                                 INSERT INTO producto (codigo, titulo, descripcion, precio, minimo, multiplo, stock, imagen, categoria, activo)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, '', ?, ?)
-                            """, (codigo, titulo, descripcion, precio, minimo, multiplo, stock, categoria, activo))
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """, (codigo, titulo, descripcion, precio, minimo, multiplo, stock, imagen_auto, categoria, activo))
                             productos_creados += 1
                 
                 except Exception as e:
@@ -885,6 +1058,10 @@ def guardar_pedido():
                         estado TEXT DEFAULT 'pendiente'
                     )
                 """)
+                # Configurar el AUTOINCREMENT para que empiece en 1200
+                cursor.execute("UPDATE sqlite_sequence SET seq = 1199 WHERE name = 'pedido'")
+                # Si no existe entrada en sqlite_sequence, insertarla
+                cursor.execute("INSERT OR IGNORE INTO sqlite_sequence (name, seq) VALUES ('pedido', 1199)")
             
             # Insertar pedido
             cursor.execute("""
@@ -913,11 +1090,41 @@ def guardar_pedido():
             pedido_id = cursor.lastrowid
             conn.commit()
         
+        # Enviar email de confirmación al cliente
+        if data.get('email'):
+            datos_envio = None
+            if data.get('metodo_entrega') == 'envio':
+                datos_envio = {
+                    'direccion': data.get('envio_direccion'),
+                    'localidad': data.get('envio_localidad'),
+                    'provincia': data.get('envio_provincia'),
+                    'cp': data.get('envio_cp'),
+                    'nombre_destinatario': data.get('envio_nombre_destinatario'),
+                    'referencias': data.get('envio_referencias')
+                }
+            
+            enviar_email_confirmacion(
+                pedido_id=pedido_id,
+                cliente_nombre=data.get('nombre'),
+                cliente_email=data.get('email'),
+                productos_json=data.get('productos'),
+                total=data.get('total'),
+                metodo_entrega=data.get('metodo_entrega', 'retiro'),
+                datos_envio=datos_envio
+            )
+        
         return jsonify({'success': True, 'pedido_id': pedido_id})
     
     except Exception as e:
         logger.error(f"Error al guardar pedido: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route("/gracias")
+def gracias():
+    """Página de agradecimiento después de completar un pedido"""
+    pedido_id = request.args.get('pedido_id')
+    return render_template('gracias.html', pedido_id=pedido_id)
 
 
 @app.route("/admin/lista-precios")

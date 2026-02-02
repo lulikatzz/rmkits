@@ -624,10 +624,10 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   toggleEnvioForm();
 
-  // Botón de enviar a WhatsApp
+  // Botón de finalizar pedido
   const btnWhatsApp = document.getElementById("enviar-whatsapp-btn");
   
-  btnWhatsApp.addEventListener("click", function(e) {
+  btnWhatsApp.addEventListener("click", async function(e) {
     e.preventDefault();
     
     // Validación del total
@@ -686,20 +686,28 @@ document.addEventListener("DOMContentLoaded", () => {
       datosCliente.envio_referencias = document.getElementById('envio-referencias')?.value.trim() || '';
     }
     
-    // Guardar pedido en segundo plano
+    // Guardar pedido y esperar respuesta
     try {
-      const blob = new Blob([JSON.stringify(datosCliente)], { type: 'application/json' });
-      navigator.sendBeacon('/guardar-pedido', blob);
+      const response = await fetch('/guardar-pedido', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(datosCliente)
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        // Redirigir a página de agradecimiento con el ID del pedido
+        window.location.href = `/gracias?pedido_id=${result.pedido_id}`;
+      } else {
+        alert('Hubo un error al procesar tu pedido. Por favor, intentá nuevamente.');
+      }
     } catch(err) {
-      console.warn('Error al guardar pedido:', err);
+      console.error('Error al guardar pedido:', err);
+      alert('Hubo un error al procesar tu pedido. Por favor, intentá nuevamente.');
     }
-    
-    // Generar URL de WhatsApp y abrir
-    const mensaje = armarMensajeWhatsApp();
-    const whatsappURL = `https://wa.me/${WHATSAPP_NUMERO}?text=${mensaje}`;
-    
-    // Abrir WhatsApp
-    window.location.href = whatsappURL;
   });
 
   // Prevenir zoom con doble tap en móviles

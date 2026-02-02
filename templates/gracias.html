@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>¡Gracias por tu pedido! - RM KITS</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        .gracias-container {
+            max-width: 800px;
+            margin: 80px auto;
+            padding: 40px 20px;
+            text-align: center;
+        }
+        
+        .gracias-icon {
+            font-size: 80px;
+            color: #4CAF50;
+            margin-bottom: 20px;
+        }
+        
+        .gracias-title {
+            font-size: 2.5em;
+            color: #6a1b9a;
+            margin-bottom: 20px;
+            font-weight: 700;
+        }
+        
+        .gracias-mensaje {
+            font-size: 1.2em;
+            color: #555;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }
+        
+        .pedido-numero {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 30px 0;
+            border-left: 4px solid #6a1b9a;
+        }
+        
+        .pedido-numero p {
+            margin: 5px 0;
+            font-size: 1.1em;
+        }
+        
+        .pedido-numero strong {
+            color: #6a1b9a;
+            font-size: 1.3em;
+        }
+        
+        .acciones {
+            margin-top: 40px;
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 15px 30px;
+            background: #6a1b9a;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            font-size: 1.1em;
+            transition: all 0.3s;
+            text-align: center;
+        }
+        
+        .btn:hover {
+            background: #4a1170;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        
+        .btn-secondary {
+            background: #757575;
+        }
+        
+        .btn-secondary:hover {
+            background: #616161;
+        }
+        
+        .info-contacto {
+            background: #e3f2fd;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 30px;
+        }
+        
+        .info-contacto h3 {
+            color: #1976d2;
+            margin-bottom: 15px;
+        }
+        
+        .info-contacto p {
+            margin: 8px 0;
+            color: #555;
+        }
+        
+        @media (max-width: 768px) {
+            .gracias-container {
+                margin: 40px auto;
+                padding: 20px 15px;
+            }
+            
+            .gracias-icon {
+                font-size: 60px;
+            }
+            
+            .gracias-title {
+                font-size: 1.8em;
+            }
+            
+            .gracias-mensaje {
+                font-size: 1em;
+            }
+            
+            .btn {
+                width: 100%;
+                max-width: 300px;
+                padding: 12px 20px;
+                font-size: 1em;
+            }
+            
+            .acciones {
+                flex-direction: column;
+                align-items: center;
+                gap: 10px;
+            }
+            
+            .pedido-numero {
+                padding: 15px;
+            }
+            
+            .pedido-numero strong {
+                font-size: 1.2em;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="gracias-container">
+        <div class="gracias-icon">✓</div>
+        
+        <h1 class="gracias-title">¡Gracias por tu pedido!</h1>
+        
+        <p class="gracias-mensaje">
+            Hemos recibido tu pedido correctamente. En breve nos comunicaremos con vos 
+            para confirmar los detalles y coordinar la entrega.
+        </p>
+        
+        {% if pedido_id %}
+        <div class="pedido-numero">
+            <p>Tu número de pedido es:</p>
+            <p><strong>#{{ pedido_id }}</strong></p>
+            <p style="font-size: 0.9em; color: #777; margin-top: 10px;">
+                Guardá este número para futuras consultas
+            </p>
+        </div>
+        {% endif %}
+        
+        <div class="info-contacto">
+            <h3>📞 Información de Contacto</h3>
+            <p>Si tenés alguna consulta, podés comunicarte con nosotros:</p>
+            <p><strong>WhatsApp:</strong> +54 9 11 5857-3906</p>
+            <p><strong>Dirección:</strong> Av. Rivadavia 2768, CABA</p>
+        </div>
+        
+        <div class="acciones">
+            <a href="{{ url_for('index') }}" class="btn">Volver al Catálogo</a>
+            <a href="{{ url_for('carrito_view') }}" class="btn btn-secondary">Ver Carrito</a>
+        </div>
+    </div>
+</body>
+</html>

@@ -10,6 +10,21 @@ import os
 from pathlib import Path
 
 
+def buscar_imagen_para_codigo(codigo, img_folder='static/img'):
+    """
+    Busca si existe una imagen para el código dado.
+    Retorna el nombre del archivo si existe, o string vacío si no.
+    """
+    extensiones = ['.jpg', '.jpeg', '.png', '.webp', '.gif']
+    
+    for ext in extensiones:
+        img_path = os.path.join(img_folder, f"{codigo}{ext}")
+        if os.path.exists(img_path):
+            return f"{codigo}{ext}"
+    
+    return ""
+
+
 def normalizar_categoria(s):
     """
     Normaliza el nombre de la categoría a un formato estándar
@@ -161,6 +176,12 @@ def importar_productos(archivo_excel="productos.xlsx", archivo_db="productos.db"
                     print(f"⚠️  Fila {idx + 2}: Saltada (sin código o título)")
                     continue
                 
+                # Obtener imagen del Excel o buscarla automáticamente
+                imagen_excel = str(row.get("imagen", "")).strip()
+                if not imagen_excel:
+                    # Si no hay imagen en el Excel, buscar por código
+                    imagen_excel = buscar_imagen_para_codigo(codigo)
+                
                 cursor.execute("""
                     INSERT INTO producto 
                     (codigo, titulo, descripcion, precio, minimo, multiplo, stock, imagen, categoria)
@@ -173,7 +194,7 @@ def importar_productos(archivo_excel="productos.xlsx", archivo_db="productos.db"
                     max(1, to_int(row.get("minimo"), 1)),
                     max(1, to_int(row.get("multiplo"), 1)),
                     to_int(row.get("stock"), 0),
-                    str(row.get("imagen", "")).strip(),
+                    imagen_excel,
                     normalizar_categoria(row.get("categoria", ""))
                 ))
                 productos_importados += 1
