@@ -3,6 +3,50 @@
 {% block title %}Dashboard{% endblock %}
 {% block page_title %}📊 Dashboard{% endblock %}
 
+{% block extra_css %}
+<style>
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 20px;
+  margin-top: 30px;
+}
+
+.chart-card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.chart-card h3 {
+  margin: 0 0 20px 0;
+  color: #333;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.chart-container {
+  position: relative;
+  height: 300px;
+}
+
+.full-width {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 768px) {
+  .charts-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .chart-container {
+    height: 250px;
+  }
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="dashboard-grid">
   <div class="stat-card">
@@ -36,6 +80,45 @@
       <div class="stat-label">Stock Total</div>
     </div>
   </div>
+
+  <div class="stat-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+    <div class="stat-icon">🛒</div>
+    <div class="stat-info">
+      <div class="stat-value" style="color: white;">{{ total_pedidos }}</div>
+      <div class="stat-label" style="color: rgba(255,255,255,0.9);">Total Pedidos</div>
+    </div>
+  </div>
+</div>
+
+<!-- Gráficos -->
+<div class="charts-grid">
+  <div class="chart-card full-width">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+      <h3 style="margin: 0;">📈 Ventas por Día</h3>
+      <select id="periodSelector" onchange="cargarVentasPorDia()" style="padding: 8px 15px; border-radius: 6px; border: 1px solid #ddd; font-size: 14px; cursor: pointer;">
+        <option value="30">Últimos 30 días</option>
+        <option value="60">Últimos 60 días</option>
+        <option value="180">Últimos 6 meses</option>
+        <option value="365">Últimos 12 meses</option>
+        <option value="all">Todo</option>
+      </select>
+    </div>
+    <div class="chart-container">
+      <canvas id="ventasPorDiaChart"></canvas>
+    </div>
+  </div>
+
+  <div class="chart-card full-width">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+      <h3 style="margin: 0;">🏆 Productos Más Vendidos</h3>
+      <input type="text" id="buscarProducto" placeholder="Buscar producto..." 
+             style="padding: 8px 15px; border-radius: 6px; border: 1px solid #ddd; font-size: 14px; width: 200px;"
+             onkeyup="cargarProductosMasVendidos()">
+    </div>
+    <div class="chart-container">
+      <canvas id="productosMasVendidosChart"></canvas>
+    </div>
+  </div>
 </div>
 
 <div class="dashboard-actions">
@@ -47,17 +130,171 @@
     <a href="{{ url_for('admin_productos') }}" class="btn btn-secondary">
       📋 Ver Todos los Productos
     </a>
+    <a href="{{ url_for('admin_pedidos') }}" class="btn btn-success">
+      🛒 Ver Pedidos
+    </a>
   </div>
 </div>
 
-<div class="info-section">
-  <h2>ℹ️ Información</h2>
-  <p>Desde este panel puedes gestionar todos los productos de tu tienda.</p>
-  <ul>
-    <li>✅ Agregar, editar y eliminar productos</li>
-    <li>📸 Cambiar imágenes de productos</li>
-    <li>💰 Actualizar precios y stock</li>
-    <li>📦 Configurar mínimos y múltiplos de venta</li>
-  </ul>
-</div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+// Variable global para el gráfico de ventas
+let ventasPorDiaChart = null;
+
+// Función para cargar ventas por día según el período
+async function cargarVentasPorDia() {
+  const periodo = document.getElementById('periodSelector').value;
+  
+  try {
+    const response = await fetch(`/admin/api/ventas-por-dia?periodo=${periodo}`);
+    const data = await response.json();
+    
+    const dias = data.map(v => v[0]);
+    const cantidades = data.map(v => v[1]);
+    const montos = data.map(v => v[2]);
+    
+    // Destruir el gráfico anterior si existe
+    if (ventasPorDiaChart) {
+      ventasPorDiaChart.destroy();
+    }
+    
+    // Crear nuevo gráfico
+    const ventasPorDiaCtx = document.getElementById('ventasPorDiaChart').getContext('2d');
+    ventasPorDiaChart = new Chart(ventasPorDiaCtx, {
+      type: 'line',
+      data: {
+        labels: dias,
+        datasets: [{
+          label: 'Cantidad de Pedidos',
+          data: cantidades,
+          borderColor: '#667eea',
+          backgroundColor: 'rgba(102, 126, 234, 0.1)',
+          tension: 0.4,
+          fill: true,
+          yAxisID: 'y'
+        }, {
+          label: 'Monto ($)',
+          data: montos,
+          borderColor: '#f5576c',
+          backgroundColor: 'rgba(245, 87, 108, 0.1)',
+          tension: 0.4,
+          fill: true,
+          yAxisID: 'y1'
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+          mode: 'index',
+          intersect: false,
+        },
+        plugins: {
+          legend: {
+            display: true,
+            position: 'top'
+          }
+        },
+        scales: {
+          y: {
+            type: 'linear',
+            display: true,
+            position: 'left',
+            title: {
+              display: true,
+              text: 'Cantidad'
+            }
+          },
+          y1: {
+            type: 'linear',
+            display: true,
+            position: 'right',
+            title: {
+              display: true,
+              text: 'Monto ($)'
+            },
+            grid: {
+              drawOnChartArea: false,
+            }
+          }
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error cargando ventas por día:', error);
+  }
+}
+
+// Cargar gráfico inicial
+cargarVentasPorDia();
+
+// Variable global para el gráfico de productos más vendidos
+let productosMasVendidosChart = null;
+
+// Función para cargar productos más vendidos con filtro
+async function cargarProductosMasVendidos() {
+  const filtro = document.getElementById('buscarProducto').value;
+  
+  try {
+    const response = await fetch(`/admin/api/productos-mas-vendidos?filtro=${encodeURIComponent(filtro)}`);
+    const productosMasVendidos = await response.json();
+    
+    const productosLabels = productosMasVendidos.map(p => {
+      const label = p[0];
+      return label.length > 30 ? label.substring(0, 30) + '...' : label;
+    });
+    const productosCantidades = productosMasVendidos.map(p => p[1]);
+    
+    // Destruir el gráfico anterior si existe
+    if (productosMasVendidosChart) {
+      productosMasVendidosChart.destroy();
+    }
+    
+    // Crear nuevo gráfico
+    const productosMasVendidosCtx = document.getElementById('productosMasVendidosChart').getContext('2d');
+    productosMasVendidosChart = new Chart(productosMasVendidosCtx, {
+      type: 'bar',
+      data: {
+        labels: productosLabels,
+        datasets: [{
+          label: 'Unidades Vendidas',
+          data: productosCantidades,
+          backgroundColor: [
+            'rgba(102, 126, 234, 0.8)',
+            'rgba(118, 75, 162, 0.8)',
+            'rgba(245, 87, 108, 0.8)',
+            'rgba(255, 159, 64, 0.8)',
+            'rgba(75, 192, 192, 0.8)',
+            'rgba(153, 102, 255, 0.8)',
+            'rgba(255, 205, 86, 0.8)',
+            'rgba(54, 162, 235, 0.8)',
+            'rgba(255, 99, 132, 0.8)',
+            'rgba(201, 203, 207, 0.8)'
+          ]
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        indexAxis: 'y',
+        plugins: {
+          legend: {
+            display: false
+          }
+        },
+        scales: {
+          x: {
+            beginAtZero: true
+          }
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error cargando productos más vendidos:', error);
+  }
+}
+
+// Cargar gráfico inicial de productos
+cargarProductosMasVendidos();
+</script>
 {% endblock %}

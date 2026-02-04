@@ -462,7 +462,7 @@ def admin_dashboard():
         with get_db_connection() as conn:
             cursor = conn.cursor()
             
-            # Estadísticas
+            # Estadísticas de productos
             cursor.execute("SELECT COUNT(*) FROM producto")
             total_productos = cursor.fetchone()[0]
             
@@ -475,15 +475,156 @@ def admin_dashboard():
             cursor.execute("SELECT SUM(stock) FROM producto")
             stock_total = cursor.fetchone()[0] or 0
             
+            # Estadísticas de pedidos
+            cursor.execute("SELECT COUNT(*) FROM pedido")
+            total_pedidos = cursor.fetchone()[0]
+            
+            cursor.execute("SELECT SUM(total) FROM pedido")
+            total_ventas = cursor.fetchone()[0] or 0
+            
+            # Ventas facturadas vs por facturar
+            cursor.execute("""
+                SELECT SUM(total) FROM pedido 
+                WHERE estado IN ('pagado', 'entregado', 'en transito', 'completado', 'enviado')
+            """)
+            ventas_facturadas = cursor.fetchone()[0] or 0
+            
+            cursor.execute("""
+                SELECT SUM(total) FROM pedido 
+                WHERE estado NOT IN ('pagado', 'entregado', 'en transito', 'completado', 'enviado')
+            """)
+            ventas_por_facturar = cursor.fetchone()[0] or 0
+            
+            # Ventas por día (últimos 30 días)
+            cursor.execute("""
+                SELECT DATE(fecha) as dia, COUNT(*) as cantidad, SUM(total) as monto
+                FROM pedido
+                WHERE fecha >= date('now', '-30 days')
+                GROUP BY DATE(fecha)
+                ORDER BY dia DESC
+            """)
+            ventas_por_dia_raw = cursor.fetchall()
+            ventas_por_dia = [list(row) for row in ventas_por_dia_raw] if ventas_por_dia_raw else []
+            
+            # Productos más vendidos
+            cursor.execute("""
+                SELECT p.productos, COUNT(*) as veces_pedido
+                FROM pedido p
+                WHERE p.productos IS NOT NULL AND p.productos != ''
+                GROUP BY p.productos
+                ORDER BY veces_pedido DESC
+                LIMIT 10
+            """)
+            productos_vendidos_raw = cursor.fetchall()
+            
+            # Procesar productos más vendidos
+            from collections import Counter
+            productos_counter = Counter()
+            
+            for row in productos_vendidos_raw:
+                try:
+                    productos_json = json.loads(row[0])
+                    for prod in productos_json:
+                        titulo = prod.get('titulo', 'Sin nombre')
+                        cantidad = prod.get('cantidad', 0)
+                        productos_counter[titulo] += cantidad
+                except Exception as e:
+                    logger.error(f"Error procesando producto: {e}")
+                    pass
+            
+            productos_mas_vendidos = list(productos_counter.most_common(10)) if productos_counter else []
+            
             return render_template("admin/dashboard.html",
                                  total_productos=total_productos,
                                  productos_con_stock=productos_con_stock,
                                  productos_sin_stock=productos_sin_stock,
-                                 stock_total=stock_total)
+                                 stock_total=stock_total,
+                                 total_pedidos=total_pedidos)
     except Exception as e:
         logger.error(f"Error en dashboard: {e}")
         flash('Error al cargar el dashboard', 'error')
         return redirect(url_for('admin_login'))
+
+
+@app.route("/admin/api/ventas-por-dia")
+@login_required
+def admin_api_ventas_por_dia():
+    """API para obtener ventas por día según período"""
+    try:
+        periodo = request.args.get('periodo', '30')
+        
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Construir query según período
+            if periodo == 'all':
+                query = """
+                    SELECT DATE(fecha) as dia, COUNT(*) as cantidad, SUM(total) as monto
+                    FROM pedido
+                    GROUP BY DATE(fecha)
+                    ORDER BY dia ASC
+                """
+            else:
+                dias = int(periodo)
+                query = f"""
+                    SELECT DATE(fecha) as dia, COUNT(*) as cantidad, SUM(total) as monto
+                    FROM pedido
+                    WHERE fecha >= date('now', '-{dias} days')
+                    GROUP BY DATE(fecha)
+                    ORDER BY dia ASC
+                """
+            
+            cursor.execute(query)
+            ventas_raw = cursor.fetchall()
+            ventas = [list(row) for row in ventas_raw] if ventas_raw else []
+            
+            return jsonify(ventas)
+    except Exception as e:
+        logger.error(f"Error en API ventas por día: {e}")
+        return jsonify([]), 500
+
+
+@app.route("/admin/api/productos-mas-vendidos")
+@login_required
+def admin_api_productos_mas_vendidos():
+    """API para obtener productos más vendidos con filtro opcional"""
+    try:
+        filtro = request.args.get('filtro', '').lower()
+        
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Obtener todos los pedidos
+            cursor.execute("""
+                SELECT p.productos
+                FROM pedido p
+                WHERE p.productos IS NOT NULL AND p.productos != ''
+            """)
+            productos_vendidos_raw = cursor.fetchall()
+            
+            # Procesar productos más vendidos con filtro
+            from collections import Counter
+            productos_counter = Counter()
+            
+            for row in productos_vendidos_raw:
+                try:
+                    productos_json = json.loads(row[0])
+                    for prod in productos_json:
+                        titulo = prod.get('titulo', 'Sin nombre')
+                        # Aplicar filtro si existe
+                        if not filtro or filtro in titulo.lower():
+                            cantidad = prod.get('cantidad', 0)
+                            productos_counter[titulo] += cantidad
+                except Exception as e:
+                    logger.error(f"Error procesando producto: {e}")
+                    pass
+            
+            productos_mas_vendidos = list(productos_counter.most_common(10)) if productos_counter else []
+            
+            return jsonify(productos_mas_vendidos)
+    except Exception as e:
+        logger.error(f"Error en API productos más vendidos: {e}")
+        return jsonify([]), 500
 
 
 @app.route("/admin/productos")
@@ -712,27 +853,74 @@ def admin_pedidos():
         return redirect(url_for('admin_dashboard'))
 
 
+@app.route("/admin/cargar-pedido-manual", methods=['POST'])
+@login_required
+def admin_cargar_pedido_manual():
+    """Cargar pedido manualmente desde datos estructurados"""
+    try:
+        data = request.json
+        
+        # Preparar productos para JSON
+        productos_json = json.dumps(data['productos'])
+        
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            
+            cursor.execute("""
+                INSERT INTO pedido (cliente_nombre, cliente_telefono, cliente_email,
+                                   metodo_entrega, envio_direccion, envio_localidad,
+                                   envio_provincia, envio_cp, envio_nombre_destinatario,
+                                   productos, total, estado)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                data['cliente_nombre'],
+                data['cliente_telefono'],
+                data.get('cliente_email', ''),
+                data['metodo_entrega'],
+                data.get('envio_direccion', ''),
+                data.get('envio_localidad', ''),
+                data.get('envio_provincia', ''),
+                data.get('envio_cp', ''),
+                data.get('envio_nombre_destinatario', ''),
+                productos_json,
+                data['total'],
+                data.get('estado', 'pendiente')
+            ))
+            
+            pedido_id = cursor.lastrowid
+            conn.commit()
+        
+        return jsonify({'success': True, 'pedido_id': pedido_id}), 200
+    
+    except Exception as e:
+        logger.error(f"Error al cargar pedido manual: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+        logger.error(f"Error al obtener pedidos: {e}")
+        flash('Error al cargar pedidos', 'error')
+        return redirect(url_for('admin_dashboard'))
+
+
 @app.route("/admin/pedidos/exportar")
 @login_required
 def admin_exportar_pedidos():
-    """Exportar pedidos a Excel"""
+    """Exportar pedidos a Excel - Genera 2 archivos en un ZIP"""
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM pedido ORDER BY fecha DESC")
             pedidos = [dict(row) for row in cursor.fetchall()]
         
-        # Crear archivo Excel
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "Pedidos"
-        
-        # Estilos
+        # Estilos comunes
         header_fill = PatternFill(start_color="6a1b9a", end_color="6a1b9a", fill_type="solid")
         header_font = Font(color="FFFFFF", bold=True, size=12)
         header_alignment = Alignment(horizontal="center", vertical="center")
         
-        # Encabezados
+        # ===== ARCHIVO 1: DATOS DEL PEDIDO =====
+        wb_datos = Workbook()
+        ws_datos = wb_datos.active
+        ws_datos.title = "Datos Pedidos"
+        
+        # Encabezados para datos
         headers = [
             "ID", "Fecha", "Cliente", "CUIT", "Teléfono", "Email", 
             "Método Entrega", "Dirección Envío", "Localidad", "Provincia", 
@@ -740,15 +928,15 @@ def admin_exportar_pedidos():
         ]
         
         for col_num, header in enumerate(headers, 1):
-            cell = ws.cell(row=1, column=col_num)
+            cell = ws_datos.cell(row=1, column=col_num)
             cell.value = header
             cell.fill = header_fill
             cell.font = header_font
             cell.alignment = header_alignment
         
-        # Datos
+        # Datos de pedidos
         for row_num, pedido in enumerate(pedidos, 2):
-            ws.cell(row=row_num, column=1, value=pedido.get('id', ''))
+            ws_datos.cell(row=row_num, column=1, value=pedido.get('id', ''))
             
             # Formatear fecha
             fecha = pedido.get('fecha', '')
@@ -758,106 +946,100 @@ def admin_exportar_pedidos():
                     fecha = fecha_obj.strftime('%d/%m/%Y %H:%M')
                 except:
                     pass
-            ws.cell(row=row_num, column=2, value=fecha)
+            ws_datos.cell(row=row_num, column=2, value=fecha)
             
-            ws.cell(row=row_num, column=3, value=pedido.get('cliente_nombre', ''))
-            ws.cell(row=row_num, column=4, value=pedido.get('cliente_cuit', ''))
-            ws.cell(row=row_num, column=5, value=pedido.get('cliente_telefono', ''))
-            ws.cell(row=row_num, column=6, value=pedido.get('cliente_email', ''))
-            ws.cell(row=row_num, column=7, value=pedido.get('metodo_entrega', ''))
-            ws.cell(row=row_num, column=8, value=pedido.get('envio_direccion', ''))
-            ws.cell(row=row_num, column=9, value=pedido.get('envio_localidad', ''))
-            ws.cell(row=row_num, column=10, value=pedido.get('envio_provincia', ''))
-            ws.cell(row=row_num, column=11, value=pedido.get('envio_cp', ''))
-            ws.cell(row=row_num, column=12, value=pedido.get('envio_nombre_destinatario', ''))
-            ws.cell(row=row_num, column=13, value=pedido.get('envio_referencias', ''))
+            ws_datos.cell(row=row_num, column=3, value=pedido.get('cliente_nombre', ''))
+            ws_datos.cell(row=row_num, column=4, value=pedido.get('cliente_cuit', ''))
+            ws_datos.cell(row=row_num, column=5, value=pedido.get('cliente_telefono', ''))
+            ws_datos.cell(row=row_num, column=6, value=pedido.get('cliente_email', ''))
+            ws_datos.cell(row=row_num, column=7, value=pedido.get('metodo_entrega', ''))
+            ws_datos.cell(row=row_num, column=8, value=pedido.get('envio_direccion', ''))
+            ws_datos.cell(row=row_num, column=9, value=pedido.get('envio_localidad', ''))
+            ws_datos.cell(row=row_num, column=10, value=pedido.get('envio_provincia', ''))
+            ws_datos.cell(row=row_num, column=11, value=pedido.get('envio_cp', ''))
+            ws_datos.cell(row=row_num, column=12, value=pedido.get('envio_nombre_destinatario', ''))
+            ws_datos.cell(row=row_num, column=13, value=pedido.get('envio_referencias', ''))
             
             # Total como número
             total = pedido.get('total', 0)
-            ws.cell(row=row_num, column=14, value=total)
+            ws_datos.cell(row=row_num, column=14, value=total)
             
-            ws.cell(row=row_num, column=15, value=pedido.get('estado', 'pendiente'))
+            ws_datos.cell(row=row_num, column=15, value=pedido.get('estado', 'pendiente'))
         
-        # Ajustar ancho de columnas
-        ws.column_dimensions['A'].width = 8
-        ws.column_dimensions['B'].width = 18
-        ws.column_dimensions['C'].width = 25
-        ws.column_dimensions['D'].width = 15
-        ws.column_dimensions['E'].width = 15
-        ws.column_dimensions['F'].width = 30
-        ws.column_dimensions['G'].width = 15
-        ws.column_dimensions['H'].width = 35
-        ws.column_dimensions['I'].width = 20
-        ws.column_dimensions['J'].width = 15
-        ws.column_dimensions['K'].width = 10
-        ws.column_dimensions['L'].width = 25
-        ws.column_dimensions['M'].width = 30
-        ws.column_dimensions['N'].width = 12
-        ws.column_dimensions['O'].width = 12
+        # Ajustar ancho de columnas datos
+        ws_datos.column_dimensions['A'].width = 8
+        ws_datos.column_dimensions['B'].width = 18
+        ws_datos.column_dimensions['C'].width = 25
+        ws_datos.column_dimensions['D'].width = 15
+        ws_datos.column_dimensions['E'].width = 15
+        ws_datos.column_dimensions['F'].width = 30
+        ws_datos.column_dimensions['G'].width = 15
+        ws_datos.column_dimensions['H'].width = 35
+        ws_datos.column_dimensions['I'].width = 20
+        ws_datos.column_dimensions['J'].width = 15
+        ws_datos.column_dimensions['K'].width = 10
+        ws_datos.column_dimensions['L'].width = 25
+        ws_datos.column_dimensions['M'].width = 30
+        ws_datos.column_dimensions['N'].width = 12
+        ws_datos.column_dimensions['O'].width = 12
         
-        # Crear una segunda hoja con detalles de productos
-        ws_detalle = wb.create_sheet(title="Detalle Productos")
+        # ===== ARCHIVO 2: PRODUCTOS DEL PEDIDO =====
+        wb_productos = Workbook()
+        ws_productos = wb_productos.active
+        ws_productos.title = "Productos Pedidos"
         
-        # Encabezados para la hoja de detalles
-        detail_headers = ["Pedido ID", "Fecha", "Cliente", "Código", "Producto", "Cantidad", "Precio Unit.", "Subtotal"]
-        for col_num, header in enumerate(detail_headers, 1):
-            cell = ws_detalle.cell(row=1, column=col_num)
+        # Encabezados para productos
+        prod_headers = ["Pedido ID", "Código", "Cantidad"]
+        for col_num, header in enumerate(prod_headers, 1):
+            cell = ws_productos.cell(row=1, column=col_num)
             cell.value = header
             cell.fill = header_fill
             cell.font = header_font
             cell.alignment = header_alignment
         
-        # Agregar detalles de productos
-        detail_row = 2
+        # Agregar productos
+        prod_row = 2
         for pedido in pedidos:
             try:
-                import json
                 productos = json.loads(pedido.get('productos', '[]'))
                 for prod in productos:
-                    ws_detalle.cell(row=detail_row, column=1, value=pedido.get('id', ''))
-                    
-                    # Fecha
-                    fecha = pedido.get('fecha', '')
-                    if fecha:
-                        try:
-                            fecha_obj = datetime.strptime(fecha, '%Y-%m-%d %H:%M:%S')
-                            fecha = fecha_obj.strftime('%d/%m/%Y')
-                        except:
-                            pass
-                    ws_detalle.cell(row=detail_row, column=2, value=fecha)
-                    
-                    ws_detalle.cell(row=detail_row, column=3, value=pedido.get('cliente_nombre', ''))
-                    ws_detalle.cell(row=detail_row, column=4, value=prod.get('codigo', ''))
-                    ws_detalle.cell(row=detail_row, column=5, value=prod.get('titulo', ''))
-                    ws_detalle.cell(row=detail_row, column=6, value=prod.get('cantidad', 0))
-                    ws_detalle.cell(row=detail_row, column=7, value=prod.get('precio', 0))
-                    ws_detalle.cell(row=detail_row, column=8, value=prod.get('cantidad', 0) * prod.get('precio', 0))
-                    detail_row += 1
+                    ws_productos.cell(row=prod_row, column=1, value=pedido.get('id', ''))
+                    ws_productos.cell(row=prod_row, column=2, value=prod.get('codigo', ''))
+                    ws_productos.cell(row=prod_row, column=3, value=prod.get('cantidad', 1))
+                    prod_row += 1
             except:
                 pass
         
-        # Ajustar ancho de columnas de detalle
-        ws_detalle.column_dimensions['A'].width = 10
-        ws_detalle.column_dimensions['B'].width = 12
-        ws_detalle.column_dimensions['C'].width = 25
-        ws_detalle.column_dimensions['D'].width = 12
-        ws_detalle.column_dimensions['E'].width = 40
-        ws_detalle.column_dimensions['F'].width = 10
-        ws_detalle.column_dimensions['G'].width = 12
-        ws_detalle.column_dimensions['H'].width = 12
+        # Ajustar ancho de columnas productos
+        ws_productos.column_dimensions['A'].width = 10
+        ws_productos.column_dimensions['B'].width = 15
+        ws_productos.column_dimensions['C'].width = 10
         
-        # Guardar en memoria
-        output = BytesIO()
-        wb.save(output)
-        output.seek(0)
+        # Guardar ambos archivos en memoria
+        output_datos = BytesIO()
+        wb_datos.save(output_datos)
+        output_datos.seek(0)
+        
+        output_productos = BytesIO()
+        wb_productos.save(output_productos)
+        output_productos.seek(0)
+        
+        # Crear ZIP con ambos archivos
+        zip_buffer = BytesIO()
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            fecha_actual = datetime.now().strftime('%Y%m%d_%H%M%S')
+            zip_file.writestr(f'pedidos_datos_{fecha_actual}.xlsx', output_datos.getvalue())
+            zip_file.writestr(f'pedidos_productos_{fecha_actual}.xlsx', output_productos.getvalue())
+        
+        zip_buffer.seek(0)
         
         # Generar nombre de archivo con fecha
         fecha_actual = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f"pedidos_rmkits_{fecha_actual}.xlsx"
+        filename = f"pedidos_rmkits_{fecha_actual}.zip"
         
         return send_file(
-            output,
-            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            zip_buffer,
+            mimetype='application/zip',
             as_attachment=True,
             download_name=filename
         )
@@ -890,32 +1072,56 @@ def admin_eliminar_pedido(id):
 @app.route("/admin/pedidos/importar", methods=["POST"])
 @login_required
 def admin_importar_pedidos():
-    """Importar pedidos desde archivo Excel"""
+    """Importar pedidos desde dos archivos Excel (datos y productos)"""
     try:
-        if 'archivo' not in request.files:
-            flash('No se seleccionó archivo', 'error')
+        # Validar que se recibieron ambos archivos
+        if 'archivo_datos' not in request.files or 'archivo_productos' not in request.files:
+            flash('Debes seleccionar ambos archivos: datos y productos', 'error')
             return redirect(url_for('admin_pedidos'))
         
-        file = request.files['archivo']
-        if file.filename == '':
-            flash('No se seleccionó archivo', 'error')
+        file_datos = request.files['archivo_datos']
+        file_productos = request.files['archivo_productos']
+        
+        if file_datos.filename == '' or file_productos.filename == '':
+            flash('Debes seleccionar ambos archivos', 'error')
             return redirect(url_for('admin_pedidos'))
         
-        if not file.filename.endswith(('.xlsx', '.xls')):
-            flash('El archivo debe ser Excel (.xlsx o .xls)', 'error')
+        if not file_datos.filename.endswith(('.xlsx', '.xls')) or not file_productos.filename.endswith(('.xlsx', '.xls')):
+            flash('Ambos archivos deben ser Excel (.xlsx o .xls)', 'error')
             return redirect(url_for('admin_pedidos'))
         
-        # Leer archivo Excel
-        wb = load_workbook(file)
-        ws = wb.active
+        # Leer archivo de datos
+        wb_datos = load_workbook(file_datos)
+        ws_datos = wb_datos.active
         
+        # Leer archivo de productos
+        wb_productos = load_workbook(file_productos)
+        ws_productos = wb_productos.active
+        
+        # Primero, construir un diccionario de productos por pedido
+        productos_por_pedido = {}
+        for row in ws_productos.iter_rows(min_row=2, values_only=True):
+            if not row[0]:  # Si no hay Pedido ID, saltar
+                continue
+            
+            pedido_id = int(row[0])
+            codigo = row[1] if row[1] else ''
+            cantidad = int(row[2]) if row[2] else 1
+            
+            if pedido_id not in productos_por_pedido:
+                productos_por_pedido[pedido_id] = []
+            
+            if codigo:
+                productos_por_pedido[pedido_id].append({'codigo': codigo, 'cantidad': cantidad})
+        
+        # Ahora importar los datos de los pedidos
         pedidos_importados = 0
         
         with get_db_connection() as conn:
             cursor = conn.cursor()
             
             # Leer desde la fila 2 (la 1 son encabezados)
-            for row in ws.iter_rows(min_row=2, values_only=True):
+            for row in ws_datos.iter_rows(min_row=2, values_only=True):
                 # Verificar que la fila tenga datos
                 if not row[0]:  # Si no hay ID, saltar
                     continue
@@ -923,6 +1129,8 @@ def admin_importar_pedidos():
                 # Extraer datos de la fila
                 # [ID, Fecha, Cliente, CUIT, Teléfono, Email, Método Entrega, Dirección Envío, 
                 #  Localidad, Provincia, CP, Destinatario, Referencias, Total, Estado]
+                
+                pedido_id = int(row[0]) if row[0] else None
                 
                 fecha_str = row[1] if row[1] else datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 if isinstance(fecha_str, datetime):
@@ -939,13 +1147,38 @@ def admin_importar_pedidos():
                         except:
                             fecha_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 
+                # Obtener productos para este pedido y buscar sus datos en la BD
+                productos_json = '[]'
+                if pedido_id in productos_por_pedido:
+                    productos_data = productos_por_pedido[pedido_id]
+                    productos = []
+                    
+                    for prod_data in productos_data:
+                        codigo = prod_data['codigo']
+                        cantidad = prod_data['cantidad']
+                        # Buscar el producto en la base de datos
+                        cursor.execute("SELECT codigo, titulo, precio FROM producto WHERE codigo = ?", (codigo,))
+                        prod_row = cursor.fetchone()
+                        if prod_row:
+                            productos.append({
+                                'codigo': prod_row[0],
+                                'titulo': prod_row[1],
+                                'cantidad': cantidad,  # Cantidad del Excel
+                                'precio': prod_row[2]
+                            })
+                    
+                    productos_json = json.dumps(productos)
+                
+                # Insertar o reemplazar el pedido respetando el ID del Excel
+                # Si el ID ya existe, se actualizará; si no existe, se insertará
                 cursor.execute("""
-                    INSERT INTO pedido (fecha, cliente_nombre, cliente_cuit, cliente_telefono, 
+                    INSERT OR REPLACE INTO pedido (id, fecha, cliente_nombre, cliente_cuit, cliente_telefono, 
                                        cliente_email, metodo_entrega, envio_direccion, envio_localidad,
                                        envio_provincia, envio_cp, envio_nombre_destinatario, 
                                        envio_referencias, productos, total, estado)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
+                    pedido_id,  # ID del Excel (número de pedido)
                     fecha_str,
                     row[2] if row[2] else '',  # cliente_nombre
                     row[3] if row[3] else '',  # cliente_cuit
@@ -958,7 +1191,7 @@ def admin_importar_pedidos():
                     row[10] if row[10] else '',  # envio_cp
                     row[11] if row[11] else '',  # envio_nombre_destinatario
                     row[12] if row[12] else '',  # envio_referencias
-                    '[]',  # productos vacío por defecto
+                    productos_json,  # productos desde el segundo Excel
                     row[13] if row[13] else 0,  # total
                     row[14] if row[14] else 'pendiente'  # estado
                 ))
@@ -1005,15 +1238,17 @@ def admin_pedido_estado(id):
 @app.route("/admin/pedidos/limpiar", methods=["POST"])
 @login_required
 def admin_limpiar_pedidos():
-    """Eliminar todos los pedidos"""
+    """Eliminar todos los pedidos y resetear el autoincremento"""
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("DELETE FROM pedido")
-            conn.commit()
             cantidad = cursor.rowcount
+            # Resetear el autoincremento de SQLite
+            cursor.execute("DELETE FROM sqlite_sequence WHERE name='pedido'")
+            conn.commit()
         
-        flash(f'{cantidad} pedido(s) eliminado(s)', 'success')
+        flash(f'{cantidad} pedido(s) eliminado(s) y base de datos reseteada', 'success')
         return jsonify({'success': True, 'cantidad': cantidad})
     
     except Exception as e:

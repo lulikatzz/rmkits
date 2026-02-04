@@ -20,8 +20,14 @@
       <div class="stat-label">Pendientes</div>
     </div>
     <div class="stat-card">
-      <div class="stat-value">${{ "{:,.0f}".format(pedidos|sum(attribute='total')) if pedidos else 0 }}</div>
+      {% set facturado = pedidos|selectattr('estado', 'in', ['pagado', 'entregado', 'en transito', 'completado', 'enviado'])|sum(attribute='total') %}
+      <div class="stat-value">${{ "{:,.0f}".format(facturado) if facturado else 0 }}</div>
       <div class="stat-label">Facturado</div>
+    </div>
+    <div class="stat-card">
+      {% set a_facturar = pedidos|rejectattr('estado', 'in', ['pagado', 'entregado', 'en transito', 'completado', 'enviado'])|sum(attribute='total') %}
+      <div class="stat-value">${{ "{:,.0f}".format(a_facturar) if a_facturar else 0 }}</div>
+      <div class="stat-label">A Facturar</div>
     </div>
   </div>
 
@@ -31,7 +37,7 @@
       📥 Exportar a Excel
     </a>
     {% endif %}
-    <button onclick="document.getElementById('importarExcel').click()" class="btn-primary-mobile">
+    <button onclick="mostrarModalImportar()" class="btn-primary-mobile">
       📤 Importar desde Excel
     </button>
     {% if pedidos|length > 0 %}
@@ -41,10 +47,48 @@
     {% endif %}
   </div>
   
-  <!-- Input oculto para importar archivo -->
-  <form id="formImportar" action="{{ url_for('admin_importar_pedidos') }}" method="POST" enctype="multipart/form-data" style="display: none;">
-    <input type="file" id="importarExcel" name="archivo" accept=".xlsx,.xls" onchange="confirmarImportar()">
-  </form>
+  <!-- Modal para importar dos archivos -->
+  <div id="modalImportar" class="modal" style="display:none">
+    <div class="modal-backdrop" onclick="cerrarModalImportar()"></div>
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h2>📤 Importar Pedidos</h2>
+        <button class="modal-close" onclick="cerrarModalImportar()">×</button>
+      </div>
+      <div class="modal-body">
+        <form id="formImportar" action="{{ url_for('admin_importar_pedidos') }}" method="POST" enctype="multipart/form-data">
+          <div style="margin-bottom: 20px;">
+            <label style="display: block; margin-bottom: 10px; font-weight: bold;">
+              📊 Archivo de Datos de Pedidos:
+            </label>
+            <input type="file" id="archivoDatos" name="archivo_datos" accept=".xlsx,.xls" required style="width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 5px;">
+            <small style="color: #666; display: block; margin-top: 5px;">
+              Debe contener: ID, Fecha, Cliente, CUIT, Teléfono, etc.
+            </small>
+          </div>
+          
+          <div style="margin-bottom: 20px;">
+            <label style="display: block; margin-bottom: 10px; font-weight: bold;">
+              📦 Archivo de Productos:
+            </label>
+            <input type="file" id="archivoProductos" name="archivo_productos" accept=".xlsx,.xls" required style="width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 5px;">
+            <small style="color: #666; display: block; margin-top: 5px;">
+              Debe contener: Pedido ID, Código, Cantidad
+            </small>
+          </div>
+          
+          <div style="text-align: right; margin-top: 20px;">
+            <button type="button" onclick="cerrarModalImportar()" class="btn btn-secondary" style="margin-right: 10px;">
+              Cancelar
+            </button>
+            <button type="submit" class="btn btn-primary">
+              ✓ Importar
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
   
   {% if pedidos|length > 0 %}
 
@@ -171,8 +215,8 @@ function verDetallePedido(id, pedido) {
     const productos = JSON.parse(pedido.productos);
     let html = '<div class="pedido-detalle">';
     
-    // Botón para copiar al portapapeles
-    html += '<div style="text-align: right; margin-bottom: 15px;">';
+    // Botones para copiar al portapapeles
+    html += '<div style="text-align: right; margin-bottom: 15px; display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap;">';
     html += `<button onclick="copiarPedidoWhatsApp(${id}, ${pedido.id}, '${pedido.cliente_nombre.replace(/'/g, "\\'")}', '${pedido.cliente_telefono}', '${pedido.metodo_entrega || 'retiro'}', ${JSON.stringify(productos).replace(/"/g, '&quot;')}, ${pedido.total}`;
     
     // Agregar datos de envío si existen
@@ -182,8 +226,21 @@ function verDetallePedido(id, pedido) {
       html += `, '', '', '', '', '', ''`;
     }
     
-    html += `)" class="btn btn-success" style="padding: 10px 20px; font-size: 14px; margin-bottom: 10px;">`;
-    html += '📋 Copiar para WhatsApp</button></div>';
+    html += `)" class="btn btn-success" style="padding: 10px 20px; font-size: 14px;">`;
+    html += '📋 Copiar para WhatsApp</button>';
+    
+    // Botón para copiar formato Word
+    html += `<button onclick="copiarPedidoWord(${id}, ${pedido.id}, '${pedido.cliente_nombre.replace(/'/g, "\\'")}', '${pedido.cliente_telefono}', '${(pedido.cliente_email || '').replace(/'/g, "\\'")}', '${pedido.metodo_entrega || 'retiro'}', ${JSON.stringify(productos).replace(/"/g, '&quot;')}`;
+    
+    // Agregar datos de envío si existen
+    if (pedido.metodo_entrega === 'envio' && pedido.envio_direccion) {
+      html += `, '${(pedido.envio_nombre_destinatario || '').replace(/'/g, "\\'")}', '${(pedido.envio_direccion || '').replace(/'/g, "\\'")}', '${(pedido.envio_localidad || '').replace(/'/g, "\\'")}', '${(pedido.envio_provincia || '').replace(/'/g, "\\'")}', '${(pedido.envio_cp || '').replace(/'/g, "\\'")}'`;
+    } else {
+      html += `, '', '', '', '', ''`;
+    }
+    
+    html += `)" class="btn btn-primary" style="padding: 10px 20px; font-size: 14px;">`;
+    html += '📄 Copiar para Word</button></div>';
     
     // Información del cliente
     html += '<div class="detalle-section">';
@@ -360,16 +417,13 @@ function eliminarPedido(id) {
   }
 }
 
-function confirmarImportar() {
-  const input = document.getElementById('importarExcel');
-  if (input.files.length > 0) {
-    const fileName = input.files[0].name;
-    if (confirm(`¿Importar pedidos desde "${fileName}"?`)) {
-      document.getElementById('formImportar').submit();
-    } else {
-      input.value = ''; // Limpiar selección
-    }
-  }
+function mostrarModalImportar() {
+  document.getElementById('modalImportar').style.display = 'flex';
+}
+
+function cerrarModalImportar() {
+  document.getElementById('modalImportar').style.display = 'none';
+  document.getElementById('formImportar').reset();
 }
 
 function limpiarPedidos() {
@@ -468,6 +522,71 @@ function copiarPedidoWhatsApp(idInterno, pedidoNum, nombre, telefono, metodoEntr
   } catch (error) {
     console.error('Error al copiar:', error);
     alert('Error al copiar el pedido: ' + error.message);
+  }
+}
+
+function copiarPedidoWord(idInterno, pedidoNum, nombre, telefono, email, metodoEntrega, productos, envioNombre, envioDireccion, envioLocalidad, envioProvincia, envioCP) {
+  try {
+    // Generar mensaje para Word
+    let mensaje = `Datos de contacto:\n`;
+    mensaje += `- Nombre: ${nombre}\n`;
+    mensaje += `- Teléfono: ${telefono}\n`;
+    if (email) {
+      mensaje += `- Email: ${email}\n`;
+    }
+    mensaje += `\n`;
+    
+    // Información de entrega
+    if (metodoEntrega === 'envio' && envioDireccion) {
+      mensaje += `Entrega: Con envío\n`;
+      mensaje += `- Dirección: ${envioDireccion}\n`;
+      mensaje += `- Localidad: ${envioLocalidad}\n`;
+      mensaje += `- Provincia: ${envioProvincia}\n`;
+      mensaje += `- Código Postal: ${envioCP}\n`;
+      if (envioNombre) {
+        mensaje += `- Nombre del destinatario: ${envioNombre}\n`;
+      }
+    } else {
+      mensaje += `Entrega: Retiro en local\n`;
+    }
+    mensaje += `\n`;
+    
+    // Productos
+    productos.forEach(p => {
+      mensaje += `${p.titulo} - Cantidad: ${p.cantidad} - Precio unitario: $${p.precio}\n`;
+    });
+    
+    // Copiar al portapapeles
+    navigator.clipboard.writeText(mensaje).then(() => {
+      Swal.fire({
+        icon: 'success',
+        title: '¡Copiado!',
+        text: 'Los datos se copiaron al portapapeles. Ahora podés pegarlos en Word.',
+        confirmButtonText: 'OK',
+        timer: 2000
+      });
+    }).catch(err => {
+      // Fallback para navegadores antiguos
+      const textarea = document.createElement('textarea');
+      textarea.value = mensaje;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      
+      Swal.fire({
+        icon: 'success',
+        title: '¡Copiado!',
+        text: 'Los datos se copiaron al portapapeles.',
+        confirmButtonText: 'OK',
+        timer: 2000
+      });
+    });
+  } catch (error) {
+    console.error('Error al copiar:', error);
+    alert('Error al copiar los datos: ' + error.message);
   }
 }
 
