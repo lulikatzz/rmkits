@@ -485,13 +485,13 @@ def admin_dashboard():
             # Ventas facturadas vs por facturar
             cursor.execute("""
                 SELECT SUM(total) FROM pedido 
-                WHERE estado IN ('pagado', 'entregado', 'en transito', 'completado', 'enviado')
+                WHERE estado IN ('pagado', 'completado', 'impreso', 'preparado')
             """)
             ventas_facturadas = cursor.fetchone()[0] or 0
             
             cursor.execute("""
                 SELECT SUM(total) FROM pedido 
-                WHERE estado NOT IN ('pagado', 'entregado', 'en transito', 'completado', 'enviado')
+                WHERE estado NOT IN ('pagado', 'completado', 'impreso', 'preparado', 'cancelado')
             """)
             ventas_por_facturar = cursor.fetchone()[0] or 0
             
@@ -1216,7 +1216,7 @@ def admin_pedido_estado(id):
         data = request.get_json()
         nuevo_estado = data.get('estado')
         
-        estados_validos = ['pendiente', 'recibido', 'confirmado', 'preparando', 'enviado', 'en-transito', 'entregado', 'pagado', 'completado', 'cancelado']
+        estados_validos = ['pendiente', 'recibido', 'confirmado', 'preparando', 'pagado', 'completado', 'cancelado', 'impreso', 'señado', 'preparado']
         if nuevo_estado not in estados_validos:
             return jsonify({'success': False, 'error': 'Estado inválido'}), 400
         

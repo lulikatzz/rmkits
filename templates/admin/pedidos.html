@@ -20,12 +20,12 @@
       <div class="stat-label">Pendientes</div>
     </div>
     <div class="stat-card">
-      {% set facturado = pedidos|selectattr('estado', 'in', ['pagado', 'entregado', 'en transito', 'completado', 'enviado'])|sum(attribute='total') %}
+      {% set facturado = pedidos|rejectattr('estado', 'equalto', 'cancelado')|selectattr('estado', 'in', ['pagado', 'completado', 'impreso', 'preparado'])|sum(attribute='total') %}
       <div class="stat-value">${{ "{:,.0f}".format(facturado) if facturado else 0 }}</div>
       <div class="stat-label">Facturado</div>
     </div>
     <div class="stat-card">
-      {% set a_facturar = pedidos|rejectattr('estado', 'in', ['pagado', 'entregado', 'en transito', 'completado', 'enviado'])|sum(attribute='total') %}
+      {% set a_facturar = pedidos|rejectattr('estado', 'in', ['pagado', 'completado', 'impreso', 'preparado', 'cancelado'])|sum(attribute='total') %}
       <div class="stat-value">${{ "{:,.0f}".format(a_facturar) if a_facturar else 0 }}</div>
       <div class="stat-label">A Facturar</div>
     </div>
@@ -313,9 +313,9 @@ function cambiarEstado(id, estadoActual) {
     { value: 'recibido', label: '📨 Recibido', color: '#17a2b8' },
     { value: 'confirmado', label: '✅ Confirmado', color: '#20c997' },
     { value: 'preparando', label: '📦 Preparando', color: '#6f42c1' },
-    { value: 'enviado', label: '🚚 Enviado', color: '#fd7e14' },
-    { value: 'en-transito', label: '🛣️ En Tránsito', color: '#0dcaf0' },
-    { value: 'entregado', label: '🏠 Entregado', color: '#198754' },
+    { value: 'impreso', label: '🖨️ Impreso', color: '#9c27b0' },
+    { value: 'señado', label: '📝 Señado', color: '#ff5722' },
+    { value: 'preparado', label: '🏁 Preparado', color: '#673ab7' },
     { value: 'pagado', label: '💰 Pagado', color: '#28a745' },
     { value: 'completado', label: '✔️ Completado', color: '#28a745' },
     { value: 'cancelado', label: '❌ Cancelado', color: '#dc3545' }
@@ -836,6 +836,21 @@ document.addEventListener('keydown', function(e) {
 .badge-preparando {
   background: #e2d9f3;
   color: #59359a;
+}
+
+.badge-impreso {
+  background: #e1bee7;
+  color: #6a1b9a;
+}
+
+.badge-señado {
+  background: #ffccbc;
+  color: #bf360c;
+}
+
+.badge-preparado {
+  background: #d1c4e9;
+  color: #4527a0;
 }
 
 .badge-enviado {
