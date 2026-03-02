@@ -215,8 +215,28 @@ function verDetallePedido(id, pedido) {
     const productos = JSON.parse(pedido.productos);
     let html = '<div class="pedido-detalle">';
     
-    // Botones para copiar al portapapeles
-    html += '<div style="text-align: right; margin-bottom: 15px; display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap;">';
+    // Botones de acciones
+    html += '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; margin-bottom: 20px;">';
+    
+    // Botón de WhatsApp (abre chat con mensaje pre-cargado)
+    html += `<button onclick="abrirWhatsAppConPedido(${id}, ${pedido.id}, '${pedido.cliente_nombre.replace(/'/g, "\\'")}', '${pedido.cliente_telefono}', '${pedido.metodo_entrega || 'retiro'}', ${JSON.stringify(productos).replace(/"/g, '&quot;')}, ${pedido.total}`;
+
+    // Agregar datos de envío si existen
+    if (pedido.metodo_entrega === 'envio' && pedido.envio_direccion) {
+      html += `, '${(pedido.envio_nombre_destinatario || '').replace(/'/g, "\\'")}', '${(pedido.envio_direccion || '').replace(/'/g, "\\'")}', '${(pedido.envio_localidad || '').replace(/'/g, "\\'")}', '${(pedido.envio_provincia || '').replace(/'/g, "\\'")}', '${(pedido.envio_cp || '').replace(/'/g, "\\'")}', '${(pedido.envio_referencias || '').replace(/'/g, "\\'")}'`;
+    } else {
+      html += `, '', '', '', '', '', ''`;
+    }
+
+    html += `)" class="btn btn-whatsapp" style="padding: 12px; font-size: 14px; white-space: nowrap;">`;
+    html += '💬 WhatsApp</button>';
+    
+    // Botón de Email
+    if (pedido.cliente_email) {
+      html += `<a href="mailto:${pedido.cliente_email}" class="btn btn-email" style="padding: 12px; font-size: 14px; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap;">`;
+      html += '📧 Email</a>';
+    }
+    
     html += `<button onclick="copiarPedidoWhatsApp(${id}, ${pedido.id}, '${pedido.cliente_nombre.replace(/'/g, "\\'")}', '${pedido.cliente_telefono}', '${pedido.metodo_entrega || 'retiro'}', ${JSON.stringify(productos).replace(/"/g, '&quot;')}, ${pedido.total}`;
     
     // Agregar datos de envío si existen
@@ -226,8 +246,8 @@ function verDetallePedido(id, pedido) {
       html += `, '', '', '', '', '', ''`;
     }
     
-    html += `)" class="btn btn-success" style="padding: 10px 20px; font-size: 14px;">`;
-    html += '📋 Copiar para WhatsApp</button>';
+    html += `)" class="btn btn-success" style="padding: 12px; font-size: 14px; white-space: nowrap;">`;
+    html += '📋 Copiar WA</button>';
     
     // Botón para copiar formato Word
     html += `<button onclick="copiarPedidoWord(${id}, ${pedido.id}, '${pedido.cliente_nombre.replace(/'/g, "\\'")}', '${pedido.cliente_telefono}', '${(pedido.cliente_email || '').replace(/'/g, "\\'")}', '${pedido.metodo_entrega || 'retiro'}', ${JSON.stringify(productos).replace(/"/g, '&quot;')}`;
@@ -239,8 +259,8 @@ function verDetallePedido(id, pedido) {
       html += `, '', '', '', '', ''`;
     }
     
-    html += `)" class="btn btn-primary" style="padding: 10px 20px; font-size: 14px;">`;
-    html += '📄 Copiar para Word</button></div>';
+    html += `)" class="btn btn-primary" style="padding: 12px; font-size: 14px; white-space: nowrap;">`;
+    html += '📄 Copiar Word</button></div>';
     
     // Información del cliente
     html += '<div class="detalle-section">';
@@ -445,51 +465,92 @@ function limpiarPedidos() {
   }
 }
 
+function generarMensajePedidoWhatsApp(pedidoNum, nombre, telefono, metodoEntrega, productos, total, envioNombre, envioDireccion, envioLocalidad, envioProvincia, envioCP, envioReferencias) {
+  let mensaje = `📦 *PEDIDO #${pedidoNum}*\n`;
+  mensaje += `━━━━━━━━━━━━━━━━━━\n\n`;
+  
+  mensaje += `👤 *Cliente:* ${nombre}\n`;
+  mensaje += `📞 *Teléfono:* ${telefono}\n`;
+  mensaje += `\n`;
+  
+  if (metodoEntrega === 'envio' && envioDireccion) {
+    mensaje += `📦 *ENVÍO A DOMICILIO*\n`;
+    mensaje += `━━━━━━━━━━━━━━━━━━\n`;
+    if (envioNombre && envioNombre !== nombre) {
+      mensaje += `Destinatario: ${envioNombre}\n`;
+    }
+    mensaje += `Dirección: ${envioDireccion}\n`;
+    mensaje += `Localidad: ${envioLocalidad}\n`;
+    mensaje += `Provincia: ${envioProvincia}\n`;
+    mensaje += `CP: ${envioCP}\n`;
+    if (envioReferencias) {
+      mensaje += `Referencias: ${envioReferencias}\n`;
+    }
+  } else {
+    mensaje += `🏪 *RETIRA EN LOCAL*\n`;
+    mensaje += `Av. Rivadavia 2768, CABA\n`;
+  }
+  mensaje += `\n`;
+  
+  mensaje += `🛒 *PRODUCTOS:*\n`;
+  mensaje += `━━━━━━━━━━━━━━━━━━\n`;
+  productos.forEach(p => {
+    const subtotal = p.precio * p.cantidad;
+    mensaje += `\n${p.codigo} - ${p.titulo}\n`;
+    mensaje += `   Cantidad: ${p.cantidad}\n`;
+    mensaje += `   Precio unitario: $${p.precio.toLocaleString('es-AR')}\n`;
+    mensaje += `   Subtotal: $${subtotal.toLocaleString('es-AR')}\n`;
+  });
+  
+  mensaje += `\n━━━━━━━━━━━━━━━━━━\n`;
+  mensaje += `💰 *TOTAL: $${total.toLocaleString('es-AR')}*\n`;
+  mensaje += `━━━━━━━━━━━━━━━━━━\n`;
+
+  return mensaje;
+}
+
+function abrirWhatsAppConPedido(idInterno, pedidoNum, nombre, telefono, metodoEntrega, productos, total, envioNombre, envioDireccion, envioLocalidad, envioProvincia, envioCP, envioReferencias) {
+  try {
+    const mensaje = generarMensajePedidoWhatsApp(
+      pedidoNum,
+      nombre,
+      telefono,
+      metodoEntrega,
+      productos,
+      total,
+      envioNombre,
+      envioDireccion,
+      envioLocalidad,
+      envioProvincia,
+      envioCP,
+      envioReferencias
+    );
+
+    const telefonoLimpio = (telefono || '').toString().replace(/[\s\-\(\)]/g, '');
+    const urlWhatsApp = `https://wa.me/${telefonoLimpio}?text=${encodeURIComponent(mensaje)}`;
+    window.open(urlWhatsApp, '_blank');
+  } catch (error) {
+    console.error('Error al abrir WhatsApp:', error);
+    alert('Error al abrir WhatsApp: ' + error.message);
+  }
+}
+
 function copiarPedidoWhatsApp(idInterno, pedidoNum, nombre, telefono, metodoEntrega, productos, total, envioNombre, envioDireccion, envioLocalidad, envioProvincia, envioCP, envioReferencias) {
   try {
-    // Generar mensaje para WhatsApp
-    let mensaje = `📦 *PEDIDO #${pedidoNum}*\n`;
-    mensaje += `━━━━━━━━━━━━━━━━━━\n\n`;
-    
-    // Datos del cliente
-    mensaje += `👤 *Cliente:* ${nombre}\n`;
-    mensaje += `📞 *Teléfono:* ${telefono}\n`;
-    mensaje += `\n`;
-    
-    // Método de entrega
-    if (metodoEntrega === 'envio' && envioDireccion) {
-      mensaje += `📦 *ENVÍO A DOMICILIO*\n`;
-      mensaje += `━━━━━━━━━━━━━━━━━━\n`;
-      if (envioNombre && envioNombre !== nombre) {
-        mensaje += `Destinatario: ${envioNombre}\n`;
-      }
-      mensaje += `Dirección: ${envioDireccion}\n`;
-      mensaje += `Localidad: ${envioLocalidad}\n`;
-      mensaje += `Provincia: ${envioProvincia}\n`;
-      mensaje += `CP: ${envioCP}\n`;
-      if (envioReferencias) {
-        mensaje += `Referencias: ${envioReferencias}\n`;
-      }
-    } else {
-      mensaje += `🏪 *RETIRA EN LOCAL*\n`;
-      mensaje += `Av. Rivadavia 2768, CABA\n`;
-    }
-    mensaje += `\n`;
-    
-    // Productos
-    mensaje += `🛒 *PRODUCTOS:*\n`;
-    mensaje += `━━━━━━━━━━━━━━━━━━\n`;
-    productos.forEach(p => {
-      const subtotal = p.precio * p.cantidad;
-      mensaje += `\n${p.codigo} - ${p.titulo}\n`;
-      mensaje += `   Cantidad: ${p.cantidad}\n`;
-      mensaje += `   Precio unitario: $${p.precio.toLocaleString('es-AR')}\n`;
-      mensaje += `   Subtotal: $${subtotal.toLocaleString('es-AR')}\n`;
-    });
-    
-    mensaje += `\n━━━━━━━━━━━━━━━━━━\n`;
-    mensaje += `💰 *TOTAL: $${total.toLocaleString('es-AR')}*\n`;
-    mensaje += `━━━━━━━━━━━━━━━━━━\n`;
+    const mensaje = generarMensajePedidoWhatsApp(
+      pedidoNum,
+      nombre,
+      telefono,
+      metodoEntrega,
+      productos,
+      total,
+      envioNombre,
+      envioDireccion,
+      envioLocalidad,
+      envioProvincia,
+      envioCP,
+      envioReferencias
+    );
     
     // Copiar al portapapeles
     navigator.clipboard.writeText(mensaje).then(() => {
@@ -1168,11 +1229,32 @@ document.addEventListener('keydown', function(e) {
     color: white;
   }
   
-  .btn-success {
-    background: #28a745;
-    color: white;
-  }
-  
+.btn-whatsapp {
+  background: #25d366;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.btn-whatsapp:hover {
+  background: #20ba5a;
+}
+
+.btn-email {
+  background: #0078d4;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.btn-email:hover {
+  background: #106ebe;
+}
+
   .btn-danger {
     background: #dc3545;
     color: white;
