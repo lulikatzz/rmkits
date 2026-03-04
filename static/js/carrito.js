@@ -634,6 +634,46 @@ document.addEventListener("DOMContentLoaded", () => {
       return false;
     }
 
+    const metodoEntrega = obtenerEntregaSeleccionada();
+    const total = calcularTotal();
+    const datosCliente = {
+      nombre: document.getElementById("contacto-nombre").value.trim(),
+      telefono: document.getElementById("contacto-telefono").value.trim(),
+      email: document.getElementById("contacto-email").value.trim(),
+      metodo_entrega: metodoEntrega,
+      productos: JSON.stringify(carrito),
+      total: total
+    };
+
+    if (metodoEntrega === "envio") {
+      datosCliente.envio_direccion = document.getElementById("envio-direccion")?.value.trim() || "";
+      datosCliente.envio_localidad = document.getElementById("envio-localidad")?.value.trim() || "";
+      datosCliente.envio_provincia = document.getElementById("envio-provincia")?.value.trim() || "";
+      datosCliente.envio_cp = document.getElementById("envio-cp")?.value.trim() || "";
+      datosCliente.envio_nombre_destinatario = document.getElementById("envio-nombre-destinatario")?.value.trim() || "";
+      datosCliente.envio_referencias = document.getElementById("envio-referencias")?.value.trim() || "";
+    }
+
+    try {
+      const response = await fetch("/guardar-pedido", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(datosCliente)
+      });
+
+      const result = await response.json();
+      if (!result.success) {
+        alert("Hubo un error al registrar tu pedido. Por favor, intentá nuevamente.");
+        return false;
+      }
+    } catch (err) {
+      console.error("Error al guardar pedido:", err);
+      alert("Hubo un error al registrar tu pedido. Por favor, intentá nuevamente.");
+      return false;
+    }
+
     const mensaje = armarMensajeWhatsApp();
     const url = `https://wa.me/${WHATSAPP_NUMERO}?text=${mensaje}`;
     window.open(url, "_blank");
