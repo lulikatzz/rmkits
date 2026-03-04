@@ -634,6 +634,10 @@ document.addEventListener("DOMContentLoaded", () => {
       return false;
     }
 
+    const mensaje = armarMensajeWhatsApp();
+    const urlWhatsApp = `https://wa.me/${WHATSAPP_NUMERO}?text=${mensaje}`;
+    const whatsappTab = window.open("about:blank", "_blank");
+
     const metodoEntrega = obtenerEntregaSeleccionada();
     const total = calcularTotal();
     const datosCliente = {
@@ -663,20 +667,30 @@ document.addEventListener("DOMContentLoaded", () => {
         body: JSON.stringify(datosCliente)
       });
 
-      const result = await response.json();
-      if (!result.success) {
+      let result = {};
+      try {
+        result = await response.json();
+      } catch (_) {
+        result = { success: false };
+      }
+
+      if (!response.ok || !result.success) {
+        if (whatsappTab && !whatsappTab.closed) whatsappTab.close();
         alert("Hubo un error al registrar tu pedido. Por favor, intentá nuevamente.");
         return false;
       }
     } catch (err) {
       console.error("Error al guardar pedido:", err);
+      if (whatsappTab && !whatsappTab.closed) whatsappTab.close();
       alert("Hubo un error al registrar tu pedido. Por favor, intentá nuevamente.");
       return false;
     }
 
-    const mensaje = armarMensajeWhatsApp();
-    const url = `https://wa.me/${WHATSAPP_NUMERO}?text=${mensaje}`;
-    window.open(url, "_blank");
+    if (whatsappTab && !whatsappTab.closed) {
+      whatsappTab.location.href = urlWhatsApp;
+    } else {
+      window.open(urlWhatsApp, "_blank");
+    }
   });
 
   // Prevenir zoom con doble tap en móviles
