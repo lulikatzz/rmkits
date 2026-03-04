@@ -629,85 +629,14 @@ document.addEventListener("DOMContentLoaded", () => {
   
   btnWhatsApp.addEventListener("click", async function(e) {
     e.preventDefault();
-    
-    // Validación del total
-    const total = calcularTotal();
-    if (total < 200000) {
-      alert("El pedido debe ser de al menos $200.000 para enviarse.");
+
+    if (!validarFormulario()) {
       return false;
     }
 
-    // Validación de campos requeridos
-    const nombre = document.getElementById("contacto-nombre").value.trim();
-    const telefono = document.getElementById("contacto-telefono").value.trim();
-    
-    if (!nombre) {
-      alert("Por favor ingresá tu nombre completo.");
-      return false;
-    }
-    
-    if (!telefono) {
-      alert("Por favor ingresá tu teléfono.");
-      return false;
-    }
-
-    // Verificar método de entrega y validar campos
-    const metodoEntrega = document.querySelector('input[name="entrega"]:checked')?.value || 'retiro';
-    if (metodoEntrega === 'envio') {
-      const dir = document.getElementById("envio-direccion")?.value.trim() || '';
-      const loc = document.getElementById("envio-localidad")?.value.trim() || '';
-      const prov = document.getElementById("envio-provincia")?.value.trim() || '';
-      const cp = document.getElementById("envio-cp")?.value.trim() || '';
-      const nombreDest = document.getElementById("envio-nombre-destinatario")?.value.trim() || '';
-      
-      if (!dir || !loc || !prov || !cp || !nombreDest) {
-        alert("Por favor completá todos los campos requeridos de envío.");
-        return false;
-      }
-    }
-    
-    // Preparar datos del cliente
-    const email = document.getElementById("contacto-email")?.value.trim() || '';
-    const datosCliente = {
-      nombre: nombre,
-      telefono: telefono,
-      email: email,
-      metodo_entrega: metodoEntrega,
-      productos: JSON.stringify(carrito),
-      total: total
-    };
-    
-    if (metodoEntrega === 'envio') {
-      datosCliente.envio_direccion = document.getElementById('envio-direccion')?.value.trim() || '';
-      datosCliente.envio_localidad = document.getElementById('envio-localidad')?.value.trim() || '';
-      datosCliente.envio_provincia = document.getElementById('envio-provincia')?.value.trim() || '';
-      datosCliente.envio_cp = document.getElementById('envio-cp')?.value.trim() || '';
-      datosCliente.envio_nombre_destinatario = document.getElementById('envio-nombre-destinatario')?.value.trim() || '';
-      datosCliente.envio_referencias = document.getElementById('envio-referencias')?.value.trim() || '';
-    }
-    
-    // Guardar pedido y esperar respuesta
-    try {
-      const response = await fetch('/guardar-pedido', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(datosCliente)
-      });
-      
-      const result = await response.json();
-      
-      if (result.success) {
-        // Redirigir a página de agradecimiento con el ID del pedido
-        window.location.href = `/gracias?pedido_id=${result.pedido_id}`;
-      } else {
-        alert('Hubo un error al procesar tu pedido. Por favor, intentá nuevamente.');
-      }
-    } catch(err) {
-      console.error('Error al guardar pedido:', err);
-      alert('Hubo un error al procesar tu pedido. Por favor, intentá nuevamente.');
-    }
+    const mensaje = armarMensajeWhatsApp();
+    const url = `https://wa.me/${WHATSAPP_NUMERO}?text=${mensaje}`;
+    window.open(url, "_blank");
   });
 
   // Prevenir zoom con doble tap en móviles
