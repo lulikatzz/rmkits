@@ -499,8 +499,9 @@ function validarFormulario() {
     const prov = document.getElementById("envio-provincia").value.trim();
     const cp = document.getElementById("envio-cp").value.trim();
     const nombreDest = document.getElementById("envio-nombre-destinatario").value.trim();
+    const dniDest = document.getElementById("envio-dni-destinatario").value.trim();
 
-    if (!dir || !loc || !prov || !cp || !nombreDest) {
+    if (!dir || !loc || !prov || !cp || !nombreDest || !dniDest) {
       alertBox({
         icon: "error",
         title: "Datos de envío incompletos",
@@ -547,6 +548,7 @@ function armarMensajeWhatsApp() {
     const prov = document.getElementById("envio-provincia").value.trim();
     const cp = document.getElementById("envio-cp").value.trim();
     const nombreDest = document.getElementById("envio-nombre-destinatario").value.trim();
+    const dniDest = document.getElementById("envio-dni-destinatario").value.trim();
     const ref = document.getElementById("envio-referencias").value.trim();
     
     lines.push("");
@@ -556,6 +558,7 @@ function armarMensajeWhatsApp() {
     lines.push(`- Provincia: ${prov}`);
     lines.push(`- Código Postal: ${cp}`);
     lines.push(`- Nombre del destinatario: ${nombreDest}`);
+    lines.push(`- DNI del destinatario: ${dniDest}`);
     if (ref) lines.push(`- Referencias: ${ref}`);
   }
 
@@ -655,6 +658,7 @@ document.addEventListener("DOMContentLoaded", () => {
       datosCliente.envio_provincia = document.getElementById("envio-provincia")?.value.trim() || "";
       datosCliente.envio_cp = document.getElementById("envio-cp")?.value.trim() || "";
       datosCliente.envio_nombre_destinatario = document.getElementById("envio-nombre-destinatario")?.value.trim() || "";
+      datosCliente.envio_dni_destinatario = document.getElementById("envio-dni-destinatario")?.value.trim() || "";
       datosCliente.envio_referencias = document.getElementById("envio-referencias")?.value.trim() || "";
     }
 

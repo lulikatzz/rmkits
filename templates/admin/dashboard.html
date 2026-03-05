@@ -133,6 +133,13 @@
     <a href="{{ url_for('admin_pedidos') }}" class="btn btn-success">
       🛒 Ver Pedidos
     </a>
+    <a href="{{ url_for('admin_exportar_todo') }}" class="btn btn-info">
+      📦 Exportar Todo
+    </a>
+    <button type="button" id="importarTodoBtn" class="btn btn-primary">
+      📥 Importar Todo
+    </button>
+    <input type="file" id="importarTodoInput" webkitdirectory directory multiple style="display:none;">
   </div>
 </div>
 
@@ -296,5 +303,63 @@ async function cargarProductosMasVendidos() {
 
 // Cargar gráfico inicial de productos
 cargarProductosMasVendidos();
+
+const importarTodoBtn = document.getElementById('importarTodoBtn');
+const importarTodoInput = document.getElementById('importarTodoInput');
+
+if (importarTodoBtn && importarTodoInput) {
+  importarTodoBtn.addEventListener('click', () => {
+    importarTodoInput.value = '';
+    importarTodoInput.click();
+  });
+
+  importarTodoInput.addEventListener('change', async (event) => {
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+
+    const confirmar = confirm(
+      `Se importarán ${files.length} archivo(s). Esta acción reemplaza productos y pedidos actuales. ¿Continuar?`
+    );
+    if (!confirmar) return;
+
+    const formData = new FormData();
+    files.forEach((file) => {
+      const relativePath = file.webkitRelativePath || file.name;
+      formData.append('archivos', file, relativePath);
+    });
+
+    const textoOriginal = importarTodoBtn.textContent;
+    importarTodoBtn.disabled = true;
+    importarTodoBtn.textContent = '⏳ Importando...';
+
+    try {
+      const response = await fetch('/admin/importar-todo', {
+        method: 'POST',
+        body: formData
+      });
+
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        alert(result.error || 'Error al importar backup');
+        return;
+      }
+
+      alert(
+        `Importación completada:\n` +
+        `- Productos: ${result.productos}\n` +
+        `- Pedidos: ${result.pedidos}\n` +
+        `- Productos nuevos: ${result.productos_nuevos}\n` +
+        `- Imágenes: ${result.imagenes}`
+      );
+      window.location.reload();
+    } catch (error) {
+      console.error('Error al importar todo:', error);
+      alert('Error de conexión al importar');
+    } finally {
+      importarTodoBtn.disabled = false;
+      importarTodoBtn.textContent = textoOriginal;
+    }
+  });
+}
 </script>
 {% endblock %}

@@ -223,7 +223,8 @@ def enviar_email_confirmacion(pedido_id, cliente_nombre, cliente_email, producto
                   <p><strong>Dirección de envío:</strong><br>
                   {datos_envio.get('direccion', '')}<br>
                   {datos_envio.get('localidad', '')}, {datos_envio.get('provincia', '')}<br>
-                  CP: {datos_envio.get('cp', '')}</p>
+                CP: {datos_envio.get('cp', '')}<br>
+                DNI del destinatario: {datos_envio.get('dni_destinatario', datos_envio.get('cuit_destinatario', ''))}</p>
             """
         
         html += """
@@ -377,12 +378,18 @@ def init_database():
                     envio_provincia TEXT,
                     envio_cp TEXT,
                     envio_nombre_destinatario TEXT,
+                    envio_dni_destinatario TEXT,
                     envio_referencias TEXT,
                     productos TEXT NOT NULL,
                     total REAL NOT NULL,
                     estado TEXT DEFAULT 'pendiente'
                 )
             """)
+
+            try:
+                cursor.execute("SELECT envio_dni_destinatario FROM pedido LIMIT 1")
+            except sqlite3.OperationalError:
+                cursor.execute("ALTER TABLE pedido ADD COLUMN envio_dni_destinatario TEXT")
             
             # Verificar si hay pedidos existentes
             cursor.execute("SELECT COUNT(*) as count FROM pedido")
@@ -625,6 +632,295 @@ def admin_api_productos_mas_vendidos():
     except Exception as e:
         logger.error(f"Error en API productos más vendidos: {e}")
         return jsonify([]), 500
+
+
+def _normalizar_ruta_backup(path):
+    """Normaliza rutas de archivos de backup para lectura robusta"""
+    return (path or '').replace('\\', '/').lstrip('./')
+
+
+def _buscar_archivo_backup(archivos_map, filename):
+    """Busca un archivo por nombre dentro de un mapa ruta->bytes"""
+    objetivo = filename.lower()
+    for ruta, contenido in archivos_map.items():
+        ruta_norm = _normalizar_ruta_backup(ruta).lower()
+        if ruta_norm == objetivo or ruta_norm.endswith('/' + objetivo):
+            return contenido
+    return None
+
+
+def _cargar_archivos_backup_desde_request():
+    """Carga archivos de backup desde ZIP o carpeta subida por el navegador"""
+    archivos_map = {}
+
+    archivo_zip = request.files.get('archivo')
+    if archivo_zip and archivo_zip.filename:
+        try:
+            zip_bytes = archivo_zip.read()
+            with zipfile.ZipFile(BytesIO(zip_bytes), 'r') as zip_file:
+                for info in zip_file.infolist():
+                    if info.is_dir():
+                        continue
+                    archivos_map[_normalizar_ruta_backup(info.filename)] = zip_file.read(info.filename)
+            return archivos_map
+        except Exception as e:
+            raise ValueError(f"El ZIP no es válido: {e}")
+
+    archivos = request.files.getlist('archivos')
+    for file in archivos:
+        if not file or not file.filename:
+            continue
+        ruta = _normalizar_ruta_backup(file.filename)
+        if not ruta:
+            continue
+        archivos_map[ruta] = file.read()
+
+    if archivos_map:
+        return archivos_map
+
+    raise ValueError("No se recibió ningún archivo para importar")
+
+
+@app.route("/admin/exportar-todo")
+@login_required
+def admin_exportar_todo():
+    """Exporta productos, pedidos, productos_nuevos e imágenes de productos nuevos"""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+
+            cursor.execute("SELECT * FROM producto ORDER BY id")
+            productos = [dict(row) for row in cursor.fetchall()]
+
+            cursor.execute("SELECT * FROM pedido ORDER BY id")
+            pedidos = [dict(row) for row in cursor.fetchall()]
+
+            cursor.execute("SELECT * FROM producto_nuevo ORDER BY id")
+            productos_nuevos = [dict(row) for row in cursor.fetchall()]
+
+            cursor.execute("""
+                SELECT DISTINCT p.imagen
+                FROM producto p
+                INNER JOIN producto_nuevo pn ON p.id = pn.producto_id
+                WHERE p.imagen IS NOT NULL AND p.imagen != ''
+            """)
+            imagenes_nuevos = [row['imagen'] for row in cursor.fetchall()]
+
+        fecha_actual = datetime.now().strftime('%Y%m%d_%H%M%S')
+        carpeta_base = f"backup_rmkits_{fecha_actual}"
+
+        zip_buffer = BytesIO()
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            metadata = {
+                'app': 'RM KITS',
+                'version': 1,
+                'exportado_en': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                'productos': len(productos),
+                'pedidos': len(pedidos),
+                'productos_nuevos': len(productos_nuevos),
+                'imagenes_nuevos': len(imagenes_nuevos)
+            }
+
+            zip_file.writestr(
+                f"{carpeta_base}/metadata.json",
+                json.dumps(metadata, ensure_ascii=False, indent=2)
+            )
+            zip_file.writestr(
+                f"{carpeta_base}/productos.json",
+                json.dumps(productos, ensure_ascii=False, indent=2)
+            )
+            zip_file.writestr(
+                f"{carpeta_base}/pedidos.json",
+                json.dumps(pedidos, ensure_ascii=False, indent=2)
+            )
+            zip_file.writestr(
+                f"{carpeta_base}/productos_nuevos.json",
+                json.dumps(productos_nuevos, ensure_ascii=False, indent=2)
+            )
+
+            for imagen in imagenes_nuevos:
+                imagen_path = os.path.join(app.config['UPLOAD_FOLDER'], imagen)
+                if not os.path.exists(imagen_path):
+                    continue
+
+                nombre_archivo = secure_filename(os.path.basename(imagen))
+                if not nombre_archivo:
+                    continue
+
+                zip_file.write(
+                    imagen_path,
+                    arcname=f"{carpeta_base}/imagenes_nuevos/{nombre_archivo}"
+                )
+
+        zip_buffer.seek(0)
+        return send_file(
+            zip_buffer,
+            mimetype='application/zip',
+            as_attachment=True,
+            download_name=f"backup_rmkits_{fecha_actual}.zip"
+        )
+
+    except Exception as e:
+        logger.error(f"Error al exportar todo: {e}")
+        flash(f'Error al exportar todo: {str(e)}', 'error')
+        return redirect(url_for('admin_dashboard'))
+
+
+@app.route("/admin/importar-todo", methods=["POST"])
+@login_required
+def admin_importar_todo():
+    """Importa backup completo de productos, pedidos, productos_nuevos e imágenes"""
+    try:
+        archivos_map = _cargar_archivos_backup_desde_request()
+
+        productos_bytes = _buscar_archivo_backup(archivos_map, 'productos.json')
+        pedidos_bytes = _buscar_archivo_backup(archivos_map, 'pedidos.json')
+        productos_nuevos_bytes = _buscar_archivo_backup(archivos_map, 'productos_nuevos.json')
+
+        if not productos_bytes or not pedidos_bytes or not productos_nuevos_bytes:
+            return jsonify({
+                'success': False,
+                'error': 'Faltan archivos requeridos: productos.json, pedidos.json y productos_nuevos.json'
+            }), 400
+
+        try:
+            productos = json.loads(productos_bytes.decode('utf-8-sig'))
+            pedidos = json.loads(pedidos_bytes.decode('utf-8-sig'))
+            productos_nuevos = json.loads(productos_nuevos_bytes.decode('utf-8-sig'))
+        except Exception as e:
+            return jsonify({'success': False, 'error': f'JSON inválido en backup: {str(e)}'}), 400
+
+        if not isinstance(productos, list) or not isinstance(pedidos, list) or not isinstance(productos_nuevos, list):
+            return jsonify({'success': False, 'error': 'El formato del backup es inválido'}), 400
+
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+
+            # Asegurar columnas actuales (migración defensiva)
+            try:
+                cursor.execute("SELECT activo FROM producto LIMIT 1")
+            except sqlite3.OperationalError:
+                cursor.execute("ALTER TABLE producto ADD COLUMN activo INTEGER NOT NULL DEFAULT 1")
+
+            columnas_pedido = [
+                ('envio_direccion', 'TEXT'),
+                ('envio_localidad', 'TEXT'),
+                ('envio_provincia', 'TEXT'),
+                ('envio_cp', 'TEXT'),
+                ('envio_nombre_destinatario', 'TEXT'),
+                ('envio_dni_destinatario', 'TEXT'),
+                ('envio_referencias', 'TEXT')
+            ]
+            for columna, tipo in columnas_pedido:
+                try:
+                    cursor.execute(f"SELECT {columna} FROM pedido LIMIT 1")
+                except sqlite3.OperationalError:
+                    cursor.execute(f"ALTER TABLE pedido ADD COLUMN {columna} {tipo}")
+
+            # Reemplazo total de datos
+            cursor.execute("DELETE FROM producto_nuevo")
+            cursor.execute("DELETE FROM pedido")
+            cursor.execute("DELETE FROM producto")
+
+            for p in productos:
+                cursor.execute("""
+                    INSERT INTO producto (
+                        id, codigo, titulo, descripcion, precio, minimo,
+                        multiplo, stock, imagen, categoria, activo
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    p.get('id'),
+                    p.get('codigo', ''),
+                    p.get('titulo', ''),
+                    p.get('descripcion', ''),
+                    p.get('precio', 0),
+                    p.get('minimo', 1),
+                    p.get('multiplo', 1),
+                    p.get('stock', 0),
+                    p.get('imagen', ''),
+                    p.get('categoria', ''),
+                    p.get('activo', 1)
+                ))
+
+            for ped in pedidos:
+                cursor.execute("""
+                    INSERT INTO pedido (
+                        id, fecha, cliente_nombre, cliente_cuit, cliente_telefono,
+                        cliente_email, cliente_direccion, metodo_entrega,
+                        envio_direccion, envio_localidad, envio_provincia, envio_cp,
+                        envio_nombre_destinatario, envio_dni_destinatario, envio_referencias,
+                        productos, total, estado
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    ped.get('id'),
+                    ped.get('fecha'),
+                    ped.get('cliente_nombre', ''),
+                    ped.get('cliente_cuit', ''),
+                    ped.get('cliente_telefono', ''),
+                    ped.get('cliente_email', ''),
+                    ped.get('cliente_direccion', ''),
+                    ped.get('metodo_entrega', 'retiro'),
+                    ped.get('envio_direccion', ''),
+                    ped.get('envio_localidad', ''),
+                    ped.get('envio_provincia', ''),
+                    ped.get('envio_cp', ''),
+                    ped.get('envio_nombre_destinatario', ''),
+                    ped.get('envio_dni_destinatario', ped.get('envio_cuit_destinatario', '')),
+                    ped.get('envio_referencias', ''),
+                    ped.get('productos', '[]'),
+                    ped.get('total', 0),
+                    ped.get('estado', 'pendiente')
+                ))
+
+            for pn in productos_nuevos:
+                cursor.execute("""
+                    INSERT INTO producto_nuevo (id, producto_id, fecha_agregado)
+                    VALUES (?, ?, ?)
+                """, (
+                    pn.get('id'),
+                    pn.get('producto_id'),
+                    pn.get('fecha_agregado')
+                ))
+
+            # Ajustar autoincrementos
+            for tabla in ['producto', 'pedido', 'producto_nuevo']:
+                cursor.execute(f"SELECT MAX(id) FROM {tabla}")
+                max_id = cursor.fetchone()[0]
+                cursor.execute("DELETE FROM sqlite_sequence WHERE name = ?", (tabla,))
+                if max_id is not None:
+                    cursor.execute("INSERT INTO sqlite_sequence (name, seq) VALUES (?, ?)", (tabla, max_id))
+
+            conn.commit()
+
+        # Importar imágenes de productos nuevos (sin borrar imágenes existentes)
+        imagenes_importadas = 0
+        for ruta, contenido in archivos_map.items():
+            ruta_norm = _normalizar_ruta_backup(ruta).lower()
+            if '/imagenes_nuevos/' not in ruta_norm and not ruta_norm.startswith('imagenes_nuevos/'):
+                continue
+
+            nombre_archivo = secure_filename(os.path.basename(ruta))
+            if not nombre_archivo:
+                continue
+
+            destino = os.path.join(app.config['UPLOAD_FOLDER'], nombre_archivo)
+            with open(destino, 'wb') as f:
+                f.write(contenido)
+            imagenes_importadas += 1
+
+        return jsonify({
+            'success': True,
+            'productos': len(productos),
+            'pedidos': len(pedidos),
+            'productos_nuevos': len(productos_nuevos),
+            'imagenes': imagenes_importadas
+        })
+
+    except ValueError as e:
+        return jsonify({'success': False, 'error': str(e)}), 400
+    except Exception as e:
+        logger.error(f"Error al importar todo: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route("/admin/productos")
@@ -1261,6 +1557,12 @@ def guardar_pedido():
     """Guardar pedido en la base de datos"""
     try:
         data = request.get_json()
+
+        metodo_entrega = (data.get('metodo_entrega') or '').strip()
+        if metodo_entrega == 'envio':
+            dni_destinatario = (data.get('envio_dni_destinatario') or data.get('envio_cuit_destinatario') or '').strip()
+            if not dni_destinatario:
+                return jsonify({'success': False, 'error': 'El DNI del destinatario es obligatorio para envíos'}), 400
         
         with get_db_connection() as conn:
             cursor = conn.cursor()
@@ -1287,6 +1589,7 @@ def guardar_pedido():
                         envio_provincia TEXT,
                         envio_cp TEXT,
                         envio_nombre_destinatario TEXT,
+                        envio_dni_destinatario TEXT,
                         envio_referencias TEXT,
                         productos TEXT NOT NULL,
                         total REAL NOT NULL,
@@ -1297,14 +1600,19 @@ def guardar_pedido():
                 cursor.execute("UPDATE sqlite_sequence SET seq = 1199 WHERE name = 'pedido'")
                 # Si no existe entrada en sqlite_sequence, insertarla
                 cursor.execute("INSERT OR IGNORE INTO sqlite_sequence (name, seq) VALUES ('pedido', 1199)")
+
+            try:
+                cursor.execute("SELECT envio_dni_destinatario FROM pedido LIMIT 1")
+            except sqlite3.OperationalError:
+                cursor.execute("ALTER TABLE pedido ADD COLUMN envio_dni_destinatario TEXT")
             
             # Insertar pedido
             cursor.execute("""
                 INSERT INTO pedido (cliente_nombre, cliente_cuit, cliente_telefono, cliente_email, 
                                    cliente_direccion, metodo_entrega, envio_direccion, envio_localidad,
-                                   envio_provincia, envio_cp, envio_nombre_destinatario, envio_referencias,
-                                   productos, total)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                   envio_provincia, envio_cp, envio_nombre_destinatario, envio_dni_destinatario,
+                                   envio_referencias, productos, total)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 data.get('nombre'),
                 data.get('cuit'),
@@ -1317,6 +1625,7 @@ def guardar_pedido():
                 data.get('envio_provincia'),
                 data.get('envio_cp'),
                 data.get('envio_nombre_destinatario'),
+                data.get('envio_dni_destinatario') or data.get('envio_cuit_destinatario'),
                 data.get('envio_referencias'),
                 data.get('productos'),  # JSON string con los productos
                 data.get('total')
@@ -1335,6 +1644,7 @@ def guardar_pedido():
                     'provincia': data.get('envio_provincia'),
                     'cp': data.get('envio_cp'),
                     'nombre_destinatario': data.get('envio_nombre_destinatario'),
+                    'dni_destinatario': data.get('envio_dni_destinatario') or data.get('envio_cuit_destinatario'),
                     'referencias': data.get('envio_referencias')
                 }
             

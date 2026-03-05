@@ -223,9 +223,9 @@ function verDetallePedido(id, pedido) {
 
     // Agregar datos de envío si existen
     if (pedido.metodo_entrega === 'envio' && pedido.envio_direccion) {
-      html += `, '${(pedido.envio_nombre_destinatario || '').replace(/'/g, "\\'")}', '${(pedido.envio_direccion || '').replace(/'/g, "\\'")}', '${(pedido.envio_localidad || '').replace(/'/g, "\\'")}', '${(pedido.envio_provincia || '').replace(/'/g, "\\'")}', '${(pedido.envio_cp || '').replace(/'/g, "\\'")}', '${(pedido.envio_referencias || '').replace(/'/g, "\\'")}'`;
+      html += `, '${(pedido.envio_nombre_destinatario || '').replace(/'/g, "\\'")}', '${(pedido.envio_direccion || '').replace(/'/g, "\\'")}', '${(pedido.envio_localidad || '').replace(/'/g, "\\'")}', '${(pedido.envio_provincia || '').replace(/'/g, "\\'")}', '${(pedido.envio_cp || '').replace(/'/g, "\\'")}', '${((pedido.envio_dni_destinatario || pedido.envio_cuit_destinatario || '-')).replace(/'/g, "\\'")}', '${(pedido.envio_referencias || '').replace(/'/g, "\\'")}'`;
     } else {
-      html += `, '', '', '', '', '', ''`;
+      html += `, '', '', '', '', '', '-', ''`;
     }
 
     html += `)" class="btn btn-whatsapp" style="padding: 12px; font-size: 14px; white-space: nowrap;">`;
@@ -241,9 +241,9 @@ function verDetallePedido(id, pedido) {
     
     // Agregar datos de envío si existen
     if (pedido.metodo_entrega === 'envio' && pedido.envio_direccion) {
-      html += `, '${(pedido.envio_nombre_destinatario || '').replace(/'/g, "\\'")}', '${(pedido.envio_direccion || '').replace(/'/g, "\\'")}', '${(pedido.envio_localidad || '').replace(/'/g, "\\'")}', '${(pedido.envio_provincia || '').replace(/'/g, "\\'")}', '${(pedido.envio_cp || '').replace(/'/g, "\\'")}', '${(pedido.envio_referencias || '').replace(/'/g, "\\'")}'`;
+      html += `, '${(pedido.envio_nombre_destinatario || '').replace(/'/g, "\\'")}', '${(pedido.envio_direccion || '').replace(/'/g, "\\'")}', '${(pedido.envio_localidad || '').replace(/'/g, "\\'")}', '${(pedido.envio_provincia || '').replace(/'/g, "\\'")}', '${(pedido.envio_cp || '').replace(/'/g, "\\'")}', '${((pedido.envio_dni_destinatario || pedido.envio_cuit_destinatario || '-')).replace(/'/g, "\\'")}', '${(pedido.envio_referencias || '').replace(/'/g, "\\'")}'`;
     } else {
-      html += `, '', '', '', '', '', ''`;
+      html += `, '', '', '', '', '', '-', ''`;
     }
     
     html += `)" class="btn btn-success" style="padding: 12px; font-size: 14px; white-space: nowrap;">`;
@@ -254,9 +254,9 @@ function verDetallePedido(id, pedido) {
     
     // Agregar datos de envío si existen
     if (pedido.metodo_entrega === 'envio' && pedido.envio_direccion) {
-      html += `, '${(pedido.envio_nombre_destinatario || '').replace(/'/g, "\\'")}', '${(pedido.envio_direccion || '').replace(/'/g, "\\'")}', '${(pedido.envio_localidad || '').replace(/'/g, "\\'")}', '${(pedido.envio_provincia || '').replace(/'/g, "\\'")}', '${(pedido.envio_cp || '').replace(/'/g, "\\'")}'`;
+      html += `, '${(pedido.envio_nombre_destinatario || '').replace(/'/g, "\\'")}', '${(pedido.envio_direccion || '').replace(/'/g, "\\'")}', '${(pedido.envio_localidad || '').replace(/'/g, "\\'")}', '${(pedido.envio_provincia || '').replace(/'/g, "\\'")}', '${(pedido.envio_cp || '').replace(/'/g, "\\'")}', '${((pedido.envio_dni_destinatario || pedido.envio_cuit_destinatario || '-')).replace(/'/g, "\\'")}'`;
     } else {
-      html += `, '', '', '', '', ''`;
+      html += `, '', '', '', '', '', '-'`;
     }
     
     html += `)" class="btn btn-primary" style="padding: 12px; font-size: 14px; white-space: nowrap;">`;
@@ -282,6 +282,7 @@ function verDetallePedido(id, pedido) {
       html += `<div class="info-item"><span class="info-label">Localidad:</span><span class="info-value">${pedido.envio_localidad}</span></div>`;
       html += `<div class="info-item"><span class="info-label">Provincia:</span><span class="info-value">${pedido.envio_provincia}</span></div>`;
       html += `<div class="info-item"><span class="info-label">CP:</span><span class="info-value">${pedido.envio_cp}</span></div>`;
+      html += `<div class="info-item"><span class="info-label">Documento:</span><span class="info-value">${pedido.envio_dni_destinatario || pedido.envio_cuit_destinatario || '-'}</span></div>`;
       if (pedido.envio_referencias) html += `<div class="info-item full-width"><span class="info-label">Referencias:</span><span class="info-value">${pedido.envio_referencias}</span></div>`;
       html += '</div></div>';
     }
@@ -465,7 +466,7 @@ function limpiarPedidos() {
   }
 }
 
-function generarMensajePedidoWhatsApp(pedidoNum, nombre, telefono, metodoEntrega, productos, total, envioNombre, envioDireccion, envioLocalidad, envioProvincia, envioCP, envioReferencias) {
+function generarMensajePedidoWhatsApp(pedidoNum, nombre, telefono, metodoEntrega, productos, total, envioNombre, envioDireccion, envioLocalidad, envioProvincia, envioCP, envioDocumento, envioReferencias) {
   let mensaje = `📦 *PEDIDO #${pedidoNum}*\n`;
   mensaje += `━━━━━━━━━━━━━━━━━━\n\n`;
   
@@ -483,6 +484,7 @@ function generarMensajePedidoWhatsApp(pedidoNum, nombre, telefono, metodoEntrega
     mensaje += `Localidad: ${envioLocalidad}\n`;
     mensaje += `Provincia: ${envioProvincia}\n`;
     mensaje += `CP: ${envioCP}\n`;
+    mensaje += `Documento: ${envioDocumento || '-'}\n`;
     if (envioReferencias) {
       mensaje += `Referencias: ${envioReferencias}\n`;
     }
@@ -509,7 +511,7 @@ function generarMensajePedidoWhatsApp(pedidoNum, nombre, telefono, metodoEntrega
   return mensaje;
 }
 
-function abrirWhatsAppConPedido(idInterno, pedidoNum, nombre, telefono, metodoEntrega, productos, total, envioNombre, envioDireccion, envioLocalidad, envioProvincia, envioCP, envioReferencias) {
+function abrirWhatsAppConPedido(idInterno, pedidoNum, nombre, telefono, metodoEntrega, productos, total, envioNombre, envioDireccion, envioLocalidad, envioProvincia, envioCP, envioDocumento, envioReferencias) {
   try {
     const mensaje = generarMensajePedidoWhatsApp(
       pedidoNum,
@@ -523,6 +525,7 @@ function abrirWhatsAppConPedido(idInterno, pedidoNum, nombre, telefono, metodoEn
       envioLocalidad,
       envioProvincia,
       envioCP,
+      envioDocumento,
       envioReferencias
     );
 
@@ -535,7 +538,7 @@ function abrirWhatsAppConPedido(idInterno, pedidoNum, nombre, telefono, metodoEn
   }
 }
 
-function copiarPedidoWhatsApp(idInterno, pedidoNum, nombre, telefono, metodoEntrega, productos, total, envioNombre, envioDireccion, envioLocalidad, envioProvincia, envioCP, envioReferencias) {
+function copiarPedidoWhatsApp(idInterno, pedidoNum, nombre, telefono, metodoEntrega, productos, total, envioNombre, envioDireccion, envioLocalidad, envioProvincia, envioCP, envioDocumento, envioReferencias) {
   try {
     const mensaje = generarMensajePedidoWhatsApp(
       pedidoNum,
@@ -549,6 +552,7 @@ function copiarPedidoWhatsApp(idInterno, pedidoNum, nombre, telefono, metodoEntr
       envioLocalidad,
       envioProvincia,
       envioCP,
+      envioDocumento,
       envioReferencias
     );
     
@@ -586,7 +590,7 @@ function copiarPedidoWhatsApp(idInterno, pedidoNum, nombre, telefono, metodoEntr
   }
 }
 
-function copiarPedidoWord(idInterno, pedidoNum, nombre, telefono, email, metodoEntrega, productos, envioNombre, envioDireccion, envioLocalidad, envioProvincia, envioCP) {
+function copiarPedidoWord(idInterno, pedidoNum, nombre, telefono, email, metodoEntrega, productos, envioNombre, envioDireccion, envioLocalidad, envioProvincia, envioCP, envioDocumento) {
   try {
     // Generar mensaje para Word
     let mensaje = `Datos de contacto:\n`;
@@ -607,6 +611,7 @@ function copiarPedidoWord(idInterno, pedidoNum, nombre, telefono, email, metodoE
       if (envioNombre) {
         mensaje += `- Nombre del destinatario: ${envioNombre}\n`;
       }
+      mensaje += `- Documento del destinatario: ${envioDocumento || '-'}\n`;
     } else {
       mensaje += `Entrega: Retiro en local\n`;
     }
