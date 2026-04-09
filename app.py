@@ -83,9 +83,9 @@ def init_persistent_storage():
             logger.error("="*60)
             logger.error("❌ ERROR CRÍTICO: Base de datos NO encontrada")
             logger.error(f"❌ Ruta esperada: {Config.DATABASE_PATH}")
-            logger.error("❌ La aplicación NO funcionará correctamente sin la base de datos")
+            logger.error("❌ La aplicación arrancará sin la base cargada")
             logger.error("="*60)
-            raise FileNotFoundError(f"Base de datos no encontrada en: {Config.DATABASE_PATH}")
+            return
         
         logger.info("="*60)
         logger.info("✅ Inicialización completada correctamente")
