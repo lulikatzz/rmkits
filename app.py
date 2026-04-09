@@ -604,14 +604,13 @@ def restaurar_backup():
                     logger.info(f"✅ Base de datos restaurada en: {Config.DATABASE_PATH}")
                 
                 # Restaurar imágenes de la carpeta img/
-                elif '/img/' in archivo or archivo.startswith('img/'):
-                    if nombre_archivo:  # Asegurar que no sea una carpeta vacía
-                        logger.info(f"✓ Extrayendo imagen: {nombre_archivo}")
-                        destino = os.path.join(Config.UPLOAD_FOLDER, nombre_archivo)
-                        with zip_ref.open(archivo) as source:
-                            with open(destino, 'wb') as target:
-                                shutil.copyfileobj(source, target)
-                        imagenes_restauradas += 1
+                elif os.path.splitext(nombre_archivo)[1].lower() in ['.png', '.jpg', '.jpeg', '.webp', '.gif']:
+                    logger.info(f"✓ Extrayendo imagen: {nombre_archivo}")
+                    destino = os.path.join(Config.UPLOAD_FOLDER, nombre_archivo)
+                    with zip_ref.open(archivo) as source:
+                        with open(destino, 'wb') as target:
+                            shutil.copyfileobj(source, target)
+                    imagenes_restauradas += 1
                 
                 else:
                     archivos_ignorados += 1
