@@ -34,8 +34,17 @@ app.config.from_object(Config)
 
 # Inicializar carpetas de almacenamiento persistente
 def init_persistent_storage():
-    """Crea las carpetas de almacenamiento persistente si no existen"""
+    """Crea las carpetas de almacenamiento persistente si no existen y verifica la DB"""
+    logger.info("="*60)
+    logger.info("INICIANDO APLICACIÓN RM KITS")
+    logger.info("="*60)
+    
     try:
+        # Loguear configuración de rutas
+        logger.info(f"📂 PERSISTENT_DATA_PATH: {Config.PERSISTENT_DATA_PATH}")
+        logger.info(f"💾 DATABASE_PATH: {Config.DATABASE_PATH}")
+        logger.info(f"🖼️  UPLOAD_FOLDER: {Config.UPLOAD_FOLDER}")
+        
         # Crear carpeta principal de datos persistentes
         os.makedirs(Config.PERSISTENT_DATA_PATH, exist_ok=True)
         logger.info(f"✓ Carpeta persistente verificada: {Config.PERSISTENT_DATA_PATH}")
@@ -44,8 +53,9 @@ def init_persistent_storage():
         os.makedirs(Config.UPLOAD_FOLDER, exist_ok=True)
         logger.info(f"✓ Carpeta de imágenes verificada: {Config.UPLOAD_FOLDER}")
         
-        # Si estamos en desarrollo y existe static/img, copiar imágenes a la nueva ubicación
+        # SOLO EN DESARROLLO: migrar archivos desde ubicaciones antiguas
         if Config.PERSISTENT_DATA_PATH != '/data':
+            # Migrar imágenes desde static/img si existe
             static_img = os.path.join('static', 'img')
             if os.path.exists(static_img) and os.path.isdir(static_img):
                 for filename in os.listdir(static_img):
@@ -54,15 +64,39 @@ def init_persistent_storage():
                     if os.path.isfile(src) and not os.path.exists(dst):
                         shutil.copy2(src, dst)
                 logger.info("✓ Imágenes migradas desde static/img")
+            
+            # Migrar productos.db desde la raíz si existe
+            if os.path.exists('productos.db') and Config.DATABASE_PATH != 'productos.db':
+                if not os.path.exists(Config.DATABASE_PATH):
+                    shutil.move('productos.db', Config.DATABASE_PATH)
+                    logger.info(f"✓ Base de datos movida a: {Config.DATABASE_PATH}")
         
-        # Si existe productos.db en la raíz, moverlo a la ubicación persistente
-        if os.path.exists('productos.db') and Config.DATABASE_PATH != 'productos.db':
-            if not os.path.exists(Config.DATABASE_PATH):
-                shutil.move('productos.db', Config.DATABASE_PATH)
-                logger.info(f"✓ Base de datos movida a: {Config.DATABASE_PATH}")
+        # VERIFICACIÓN CRÍTICA: Comprobar existencia de la base de datos
+        if os.path.exists(Config.DATABASE_PATH):
+            db_size = os.path.getsize(Config.DATABASE_PATH)
+            logger.info(f"✅ Base de datos encontrada: {Config.DATABASE_PATH} ({db_size:,} bytes)")
+            
+            # Verificar que la DB tenga contenido
+            if db_size < 1024:  # Menos de 1KB es sospechoso
+                logger.warning(f"⚠️  ADVERTENCIA: La base de datos parece estar vacía ({db_size} bytes)")
+        else:
+            logger.error("="*60)
+            logger.error("❌ ERROR CRÍTICO: Base de datos NO encontrada")
+            logger.error(f"❌ Ruta esperada: {Config.DATABASE_PATH}")
+            logger.error("❌ La aplicación NO funcionará correctamente sin la base de datos")
+            logger.error("="*60)
+            raise FileNotFoundError(f"Base de datos no encontrada en: {Config.DATABASE_PATH}")
         
+        logger.info("="*60)
+        logger.info("✅ Inicialización completada correctamente")
+        logger.info("="*60)
+        
+    except FileNotFoundError:
+        # Re-lanzar el error de DB no encontrada
+        raise
     except Exception as e:
-        logger.error(f"Error al inicializar almacenamiento persistente: {e}")
+        logger.error(f"❌ Error al inicializar almacenamiento persistente: {e}")
+        raise
 
 
 # Inicializar al cargar la aplicación
@@ -398,8 +432,26 @@ def generar_codigo_producto():
 def init_database():
     """Inicializa las tablas necesarias en la base de datos"""
     try:
+        # Verificar que la DB ya existe antes de conectar
+        # (sqlite3.connect crea una DB nueva si no existe, lo cual queremos evitar)
+        if not os.path.exists(Config.DATABASE_PATH):
+            logger.error(f"❌ No se puede inicializar: la base de datos no existe en {Config.DATABASE_PATH}")
+            raise FileNotFoundError(f"Base de datos no encontrada: {Config.DATABASE_PATH}")
+        
         with get_db_connection() as conn:
             cursor = conn.cursor()
+            
+            # Verificar que la tabla producto existe (asegurar que no es una DB vacía nueva)
+            cursor.execute("""
+                SELECT name FROM sqlite_master 
+                WHERE type='table' AND name='producto'
+            """)
+            if not cursor.fetchone():
+                logger.error("❌ ERROR: La base de datos no contiene la tabla 'producto'")
+                logger.error("❌ Parece que la base de datos está vacía o corrupta")
+                raise Exception("Base de datos inválida: falta la tabla 'producto'")
+            
+            logger.info("✓ Tabla 'producto' encontrada en la base de datos")
             
             # Crear tabla categorías si no existe
             cursor.execute("""
@@ -464,8 +516,12 @@ def init_database():
                     cursor.execute("INSERT OR REPLACE INTO sqlite_sequence (name, seq) VALUES ('pedido', 1199)")
             
             conn.commit()
+            logger.info("✓ Tablas de base de datos inicializadas correctamente")
+    except FileNotFoundError:
+        raise
     except Exception as e:
-        logger.error(f"Error al inicializar base de datos: {e}")
+        logger.error(f"❌ Error al inicializar base de datos: {e}")
+        raise
 
 
 def migrar_categorias_existentes():
