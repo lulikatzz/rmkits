@@ -1,0 +1,358 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Categorías{% endblock %}
+{% block page_title %}Gestión de Categorías{% endblock %}
+
+{% block header_actions %}
+<button class="btn btn-primary" onclick="mostrarModalNuevaCategoria()">
+  <span>➕ Nueva Categoría</span>
+</button>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+  <div class="card-header">
+    <h3>📁 Lista de Categorías</h3>
+    <p class="text-muted">Gestiona las categorías de tus productos</p>
+  </div>
+  
+  <div class="card-body">
+    {% if categorias %}
+    <div class="table-responsive">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Nombre</th>
+            <th>Productos</th>
+            <th>Fecha Creación</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for categoria in categorias %}
+          <tr>
+            <td>{{ categoria.id }}</td>
+            <td><strong>{{ categoria.nombre }}</strong></td>
+            <td>
+              <span class="badge badge-info">{{ categoria.num_productos }} producto(s)</span>
+            </td>
+            <td>{{ categoria.fecha_creacion }}</td>
+            <td>
+              <button class="btn btn-sm btn-secondary" onclick="mostrarModalEditarCategoria({{ categoria.id }}, '{{ categoria.nombre }}')">
+                ✏️ Editar
+              </button>
+              <button class="btn btn-sm btn-danger" onclick="mostrarModalEliminarCategoria({{ categoria.id }}, '{{ categoria.nombre }}', {{ categoria.num_productos }})">
+                🗑️ Eliminar
+              </button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+      <p>No hay categorías creadas. Haz clic en "Nueva Categoría" para crear la primera.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Modal Nueva Categoría -->
+<div id="modalNuevaCategoria" class="modal" style="display: none;">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>➕ Nueva Categoría</h3>
+      <button class="close-btn" onclick="cerrarModal('modalNuevaCategoria')">&times;</button>
+    </div>
+    <form method="POST" action="{{ url_for('admin_categoria_nueva') }}">
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="nombreNueva">Nombre de la Categoría *</label>
+          <input type="text" id="nombreNueva" name="nombre" class="form-control" required maxlength="100">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="cerrarModal('modalNuevaCategoria')">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Crear Categoría</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal Editar Categoría -->
+<div id="modalEditarCategoria" class="modal" style="display: none;">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>✏️ Editar Categoría</h3>
+      <button class="close-btn" onclick="cerrarModal('modalEditarCategoria')">&times;</button>
+    </div>
+    <form id="formEditarCategoria" method="POST">
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="nombreEditar">Nombre de la Categoría *</label>
+          <input type="text" id="nombreEditar" name="nombre" class="form-control" required maxlength="100">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="cerrarModal('modalEditarCategoria')">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Guardar Cambios</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal Eliminar Categoría -->
+<div id="modalEliminarCategoria" class="modal" style="display: none;">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>🗑️ Eliminar Categoría</h3>
+      <button class="close-btn" onclick="cerrarModal('modalEliminarCategoria')">&times;</button>
+    </div>
+    <form id="formEliminarCategoria" method="POST">
+      <div class="modal-body">
+        <div class="alert alert-warning">
+          <strong>⚠️ Atención:</strong>
+          <p id="mensajeEliminar"></p>
+        </div>
+        
+        <div id="selectorCategoriaDestino" style="display: none;">
+          <div class="form-group">
+            <label for="categoriaDestino">Selecciona la categoría de destino para reasignar los productos *</label>
+            <select id="categoriaDestino" name="categoria_destino" class="form-control">
+              <option value="">-- Selecciona una categoría --</option>
+              {% for cat in categorias %}
+              <option value="{{ cat.nombre }}">{{ cat.nombre }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" onclick="cerrarModal('modalEliminarCategoria')">Cancelar</button>
+        <button type="submit" class="btn btn-danger">Eliminar Categoría</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<style>
+  .modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+  }
+  
+  .modal-content {
+    background: white;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 500px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  }
+  
+  .modal-header {
+    padding: 20px;
+    border-bottom: 1px solid #e0e0e0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  
+  .modal-header h3 {
+    margin: 0;
+    color: #333;
+  }
+  
+  .close-btn {
+    background: none;
+    border: none;
+    font-size: 28px;
+    cursor: pointer;
+    color: #999;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .close-btn:hover {
+    color: #333;
+  }
+  
+  .modal-body {
+    padding: 20px;
+  }
+  
+  .modal-footer {
+    padding: 15px 20px;
+    border-top: 1px solid #e0e0e0;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+  
+  .form-group {
+    margin-bottom: 15px;
+  }
+  
+  .form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 500;
+    color: #555;
+  }
+  
+  .form-control {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+  }
+  
+  .form-control:focus {
+    outline: none;
+    border-color: #6a1b9a;
+    box-shadow: 0 0 0 2px rgba(106, 27, 154, 0.1);
+  }
+  
+  .badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  
+  .badge-info {
+    background-color: #e3f2fd;
+    color: #1976d2;
+  }
+  
+  .alert {
+    padding: 15px;
+    border-radius: 4px;
+    margin-bottom: 15px;
+  }
+  
+  .alert-info {
+    background-color: #e3f2fd;
+    color: #1976d2;
+    border: 1px solid #90caf9;
+  }
+  
+  .alert-warning {
+    background-color: #fff8e1;
+    color: #f57c00;
+    border: 1px solid #ffecb3;
+  }
+  
+  .alert p {
+    margin: 5px 0 0 0;
+  }
+  
+  .table-responsive {
+    overflow-x: auto;
+  }
+  
+  .table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  
+  .table th,
+  .table td {
+    padding: 12px;
+    text-align: left;
+    border-bottom: 1px solid #e0e0e0;
+  }
+  
+  .table th {
+    background-color: #f5f5f5;
+    font-weight: 600;
+    color: #555;
+  }
+  
+  .table tbody tr:hover {
+    background-color: #f9f9f9;
+  }
+</style>
+
+<script>
+  function mostrarModalNuevaCategoria() {
+    document.getElementById('modalNuevaCategoria').style.display = 'flex';
+    document.getElementById('nombreNueva').value = '';
+    document.getElementById('nombreNueva').focus();
+  }
+  
+  function mostrarModalEditarCategoria(id, nombre) {
+    document.getElementById('modalEditarCategoria').style.display = 'flex';
+    document.getElementById('nombreEditar').value = nombre;
+    document.getElementById('formEditarCategoria').action = `/admin/categoria/${id}/editar`;
+    document.getElementById('nombreEditar').focus();
+  }
+  
+  function mostrarModalEliminarCategoria(id, nombre, numProductos) {
+    const modal = document.getElementById('modalEliminarCategoria');
+    const mensaje = document.getElementById('mensajeEliminar');
+    const selectorDestino = document.getElementById('selectorCategoriaDestino');
+    const selectDestino = document.getElementById('categoriaDestino');
+    
+    modal.style.display = 'flex';
+    document.getElementById('formEliminarCategoria').action = `/admin/categoria/${id}/eliminar`;
+    
+    // Remover la opción de la categoría actual del selector
+    Array.from(selectDestino.options).forEach(option => {
+      if (option.value === nombre) {
+        option.style.display = 'none';
+      } else {
+        option.style.display = 'block';
+      }
+    });
+    selectDestino.value = '';
+    
+    if (numProductos > 0) {
+      mensaje.textContent = `La categoría "${nombre}" tiene ${numProductos} producto(s). Debes seleccionar una categoría de destino para reasignar estos productos antes de eliminar.`;
+      selectorDestino.style.display = 'block';
+      selectDestino.required = true;
+    } else {
+      mensaje.textContent = `¿Estás seguro de que deseas eliminar la categoría "${nombre}"? Esta acción no se puede deshacer.`;
+      selectorDestino.style.display = 'none';
+      selectDestino.required = false;
+    }
+  }
+  
+  function cerrarModal(idModal) {
+    document.getElementById(idModal).style.display = 'none';
+  }
+  
+  // Cerrar modales al hacer clic fuera de ellos
+  window.onclick = function(event) {
+    if (event.target.classList.contains('modal')) {
+      event.target.style.display = 'none';
+    }
+  }
+  
+  // Cerrar modales con la tecla Escape
+  document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') {
+      document.querySelectorAll('.modal').forEach(modal => {
+        modal.style.display = 'none';
+      });
+    }
+  });
+</script>
+{% endblock %}

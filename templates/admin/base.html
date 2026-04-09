@@ -26,6 +26,10 @@
           <span class="icon">📦</span>
           <span>Productos</span>
         </a>
+        <a href="{{ url_for('admin_categorias') }}" class="nav-item {% if request.endpoint == 'admin_categorias' %}active{% endif %}">
+          <span class="icon">📁</span>
+          <span>Categorías</span>
+        </a>
         <a href="{{ url_for('admin_productos_nuevos') }}" class="nav-item {% if request.endpoint == 'admin_productos_nuevos' %}active{% endif %}">
           <span class="icon">🆕</span>
           <span>Productos Nuevos</span>

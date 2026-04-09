@@ -36,8 +36,9 @@
 
     <div class="filtros">
       <button class="filtro-btn active" data-cat="">Todos</button>
-      <button class="filtro-btn" data-cat="libreria">Librería</button>
-      <button class="filtro-btn" data-cat="jugueteria/cotillon">Juguetería/Cotillón</button>
+      {% for categoria in categorias %}
+      <button class="filtro-btn" data-cat="{{ categoria.nombre }}">{{ categoria.nombre }}</button>
+      {% endfor %}
     </div>
 
     <div class="controls">

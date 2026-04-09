@@ -62,7 +62,7 @@ def get_productos():
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM producto WHERE stock > 0 AND activo = 1")
+            cursor.execute("SELECT * FROM producto WHERE stock > 0 AND activo = 1 ORDER BY codigo DESC")
             filas = cursor.fetchall()
             productos = [dict(fila) for fila in filas]
             return productos
@@ -76,9 +76,21 @@ def index():
     """Página principal con lista de productos"""
     try:
         productos = get_productos()
+        
+        # Obtener categorías de la base de datos
+        categorias = []
+        try:
+            with get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT * FROM categoria ORDER BY nombre")
+                categorias = [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            logger.error(f"Error al obtener categorías: {e}")
+        
         return render_template(
             "index.html",
             productos=productos,
+            categorias=categorias,
             config={
                 'pedido_minimo': Config.PEDIDO_MINIMO,
                 'whatsapp': Config.WHATSAPP_NUMBER
@@ -99,7 +111,7 @@ def carrito_view():
         try:
             with get_db_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute("SELECT id, codigo, precio, stock, minimo, multiplo, imagen FROM producto WHERE activo = 1")
+                cursor.execute("SELECT id, codigo, precio, stock, minimo, multiplo, imagen FROM producto WHERE activo = 1 ORDER BY codigo DESC")
                 for row in cursor.fetchall():
                     productos_actualizados[row['codigo']] = {
                         'id': row['id'],
@@ -352,6 +364,15 @@ def init_database():
         with get_db_connection() as conn:
             cursor = conn.cursor()
             
+            # Crear tabla categorías si no existe
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS categoria (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    nombre TEXT NOT NULL UNIQUE,
+                    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            
             # Crear tabla productos_nuevos si no existe
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS producto_nuevo (
@@ -410,8 +431,29 @@ def init_database():
         logger.error(f"Error al inicializar base de datos: {e}")
 
 
+def migrar_categorias_existentes():
+    """Migra las categorías existentes de los productos a la tabla de categorías"""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Obtener categorías únicas de los productos
+            cursor.execute("SELECT DISTINCT categoria FROM producto WHERE categoria IS NOT NULL AND categoria != '' ORDER BY categoria")
+            categorias_existentes = [row['categoria'] for row in cursor.fetchall()]
+            
+            # Insertar categorías en la tabla de categorías si no existen
+            for categoria in categorias_existentes:
+                cursor.execute("INSERT OR IGNORE INTO categoria (nombre) VALUES (?)", (categoria,))
+            
+            conn.commit()
+            logger.info(f"Migradas {len(categorias_existentes)} categorías existentes")
+    except Exception as e:
+        logger.error(f"Error al migrar categorías existentes: {e}")
+
+
 # Inicializar base de datos al arrancar la app
 init_database()
+migrar_categorias_existentes()
 
 # =============================================================================
 # PANEL DE ADMINISTRACIÓN
@@ -689,7 +731,7 @@ def admin_exportar_todo():
         with get_db_connection() as conn:
             cursor = conn.cursor()
 
-            cursor.execute("SELECT * FROM producto ORDER BY id")
+            cursor.execute("SELECT * FROM producto ORDER BY codigo DESC")
             productos = [dict(row) for row in cursor.fetchall()]
 
             cursor.execute("SELECT * FROM pedido ORDER BY id")
@@ -930,12 +972,12 @@ def admin_productos():
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM producto ORDER BY id DESC")
+            cursor.execute("SELECT * FROM producto ORDER BY codigo DESC")
             productos = [dict(row) for row in cursor.fetchall()]
             
-            # Obtener categorías únicas
-            cursor.execute("SELECT DISTINCT categoria FROM producto WHERE categoria IS NOT NULL AND categoria != '' ORDER BY categoria")
-            categorias = [row['categoria'] for row in cursor.fetchall()]
+            # Obtener categorías de la tabla de categorías
+            cursor.execute("SELECT nombre FROM categoria ORDER BY nombre")
+            categorias = [row['nombre'] for row in cursor.fetchall()]
             
             return render_template("admin/productos.html", productos=productos, categorias=categorias)
     except Exception as e:
@@ -951,7 +993,7 @@ def admin_descargar_excel():
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM producto ORDER BY categoria, titulo")
+            cursor.execute("SELECT * FROM producto ORDER BY codigo DESC")
             productos = [dict(row) for row in cursor.fetchall()]
         
         # Crear workbook
@@ -1679,7 +1721,7 @@ def admin_lista_precios():
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM producto WHERE stock > 0 ORDER BY categoria, titulo")
+            cursor.execute("SELECT * FROM producto WHERE stock > 0 ORDER BY codigo DESC")
             productos = [dict(row) for row in cursor.fetchall()]
             
             # Obtener categorías únicas
@@ -1752,7 +1794,18 @@ def admin_producto_nuevo():
     
     # Generar el código que se usará para el nuevo producto
     nuevo_codigo = generar_codigo_producto()
-    return render_template("admin/producto_form.html", producto=None, action="Crear", nuevo_codigo=nuevo_codigo)
+    
+    # Obtener categorías de la base de datos
+    categorias = []
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM categoria ORDER BY nombre")
+            categorias = [dict(row) for row in cursor.fetchall()]
+    except Exception as e:
+        logger.error(f"Error al obtener categorías: {e}")
+    
+    return render_template("admin/producto_form.html", producto=None, action="Crear", nuevo_codigo=nuevo_codigo, categorias=categorias)
 
 
 @app.route("/admin/producto/<int:id>/editar", methods=["GET", "POST"])
@@ -1813,7 +1866,12 @@ def admin_producto_editar(id):
             # GET - mostrar formulario
             cursor.execute("SELECT * FROM producto WHERE id=?", (id,))
             producto = dict(cursor.fetchone())
-            return render_template("admin/producto_form.html", producto=producto, action="Editar")
+            
+            # Obtener categorías de la base de datos
+            cursor.execute("SELECT * FROM categoria ORDER BY nombre")
+            categorias = [dict(row) for row in cursor.fetchall()]
+            
+            return render_template("admin/producto_form.html", producto=producto, action="Editar", categorias=categorias)
     
     except Exception as e:
         logger.error(f"Error al editar producto: {e}")
@@ -1903,12 +1961,148 @@ def admin_api_productos():
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM producto ORDER BY id DESC")
+            cursor.execute("SELECT * FROM producto ORDER BY codigo DESC")
             productos = [dict(row) for row in cursor.fetchall()]
             return jsonify(productos)
     except Exception as e:
         logger.error(f"Error en API productos: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+# =============================================================================
+# GESTIÓN DE CATEGORÍAS
+# =============================================================================
+
+@app.route("/admin/categorias")
+@login_required
+def admin_categorias():
+    """Muestra la página de gestión de categorías"""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM categoria ORDER BY nombre")
+            categorias = [dict(row) for row in cursor.fetchall()]
+            
+            # Contar productos por categoría
+            for categoria in categorias:
+                cursor.execute("SELECT COUNT(*) as count FROM producto WHERE categoria = ?", (categoria['nombre'],))
+                categoria['num_productos'] = cursor.fetchone()['count']
+            
+            return render_template("admin/categorias.html", categorias=categorias)
+    except Exception as e:
+        logger.error(f"Error al obtener categorías: {e}")
+        flash('Error al cargar categorías', 'error')
+        return redirect(url_for('admin_dashboard'))
+
+
+@app.route("/admin/categoria/nueva", methods=["POST"])
+@login_required
+def admin_categoria_nueva():
+    """Crear nueva categoría"""
+    try:
+        nombre = request.form.get('nombre', '').strip()
+        
+        if not nombre:
+            flash('El nombre de la categoría es requerido', 'error')
+            return redirect(url_for('admin_categorias'))
+        
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("INSERT INTO categoria (nombre) VALUES (?)", (nombre,))
+            conn.commit()
+        
+        flash('Categoría creada exitosamente', 'success')
+    except sqlite3.IntegrityError:
+        flash('Ya existe una categoría con ese nombre', 'error')
+    except Exception as e:
+        logger.error(f"Error al crear categoría: {e}")
+        flash(f'Error al crear categoría: {str(e)}', 'error')
+    
+    return redirect(url_for('admin_categorias'))
+
+
+@app.route("/admin/categoria/<int:id>/editar", methods=["POST"])
+@login_required
+def admin_categoria_editar(id):
+    """Editar categoría existente"""
+    try:
+        nuevo_nombre = request.form.get('nombre', '').strip()
+        
+        if not nuevo_nombre:
+            flash('El nombre de la categoría es requerido', 'error')
+            return redirect(url_for('admin_categorias'))
+        
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Obtener el nombre anterior
+            cursor.execute("SELECT nombre FROM categoria WHERE id = ?", (id,))
+            resultado = cursor.fetchone()
+            if not resultado:
+                flash('Categoría no encontrada', 'error')
+                return redirect(url_for('admin_categorias'))
+            
+            nombre_anterior = resultado['nombre']
+            
+            # Actualizar el nombre de la categoría
+            cursor.execute("UPDATE categoria SET nombre = ? WHERE id = ?", (nuevo_nombre, id))
+            
+            # Actualizar todos los productos que tenían la categoría anterior
+            cursor.execute("UPDATE producto SET categoria = ? WHERE categoria = ?", (nuevo_nombre, nombre_anterior))
+            
+            conn.commit()
+        
+        flash('Categoría actualizada exitosamente', 'success')
+    except sqlite3.IntegrityError:
+        flash('Ya existe una categoría con ese nombre', 'error')
+    except Exception as e:
+        logger.error(f"Error al editar categoría: {e}")
+        flash(f'Error al editar categoría: {str(e)}', 'error')
+    
+    return redirect(url_for('admin_categorias'))
+
+
+@app.route("/admin/categoria/<int:id>/eliminar", methods=["POST"])
+@login_required
+def admin_categoria_eliminar(id):
+    """Eliminar categoría (con reasignación de productos)"""
+    try:
+        categoria_destino = request.form.get('categoria_destino', '').strip()
+        
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            
+            # Obtener el nombre de la categoría a eliminar
+            cursor.execute("SELECT nombre FROM categoria WHERE id = ?", (id,))
+            resultado = cursor.fetchone()
+            if not resultado:
+                flash('Categoría no encontrada', 'error')
+                return redirect(url_for('admin_categorias'))
+            
+            nombre_categoria = resultado['nombre']
+            
+            # Verificar si hay productos con esta categoría
+            cursor.execute("SELECT COUNT(*) as count FROM producto WHERE categoria = ?", (nombre_categoria,))
+            num_productos = cursor.fetchone()['count']
+            
+            if num_productos > 0:
+                if not categoria_destino:
+                    flash(f'Esta categoría tiene {num_productos} producto(s). Debes seleccionar una categoría de destino', 'error')
+                    return redirect(url_for('admin_categorias'))
+                
+                # Reasignar productos a la categoría destino
+                cursor.execute("UPDATE producto SET categoria = ? WHERE categoria = ?", (categoria_destino, nombre_categoria))
+            
+            # Eliminar la categoría
+            cursor.execute("DELETE FROM categoria WHERE id = ?", (id,))
+            conn.commit()
+        
+        flash('Categoría eliminada exitosamente', 'success')
+    except Exception as e:
+        logger.error(f"Error al eliminar categoría: {e}")
+        flash(f'Error al eliminar categoría: {str(e)}', 'error')
+    
+    return redirect(url_for('admin_categorias'))
 
 
 @app.route("/admin/productos-nuevos")

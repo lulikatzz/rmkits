@@ -47,8 +47,9 @@
           <label for="categoria">Categoría</label>
           <select id="categoria" name="categoria">
             <option value="">Sin categoría</option>
-            <option value="libreria" {% if producto and producto.categoria == 'libreria' %}selected{% endif %}>Librería</option>
-            <option value="jugueteria/cotillon" {% if producto and producto.categoria == 'jugueteria/cotillon' %}selected{% endif %}>Juguetería/Cotillón</option>
+            {% for cat in categorias %}
+            <option value="{{ cat.nombre }}" {% if producto and producto.categoria == cat.nombre %}selected{% endif %}>{{ cat.nombre }}</option>
+            {% endfor %}
           </select>
         </div>
       </div>
