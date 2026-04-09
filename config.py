@@ -9,10 +9,16 @@ class Config:
     # Rutas persistentes (montadas en disco persistente de Render)
     # En desarrollo usa carpeta local, en producción usa /data
     # Si la variable de entorno no está definida, usa 'data' (carpeta local para desarrollo)
-    PERSISTENT_DATA_PATH = os.environ.get('PERSISTENT_DATA_PATH', 'data')
-    
-    # Base de datos (en almacenamiento persistente)
-    DATABASE_PATH = os.path.join(PERSISTENT_DATA_PATH, 'productos.db')
+    RENDER = os.environ.get("RENDER", "false").lower() == "true"
+
+    # En Render usar disk persistente; en local usar carpeta data
+    PERSISTENT_DATA_PATH = "/data" if RENDER else "data"
+
+    # Base de datos
+    DATABASE_PATH = os.path.join(PERSISTENT_DATA_PATH, "productos.db")
+
+    # Uploads
+    UPLOAD_FOLDER = os.path.join(PERSISTENT_DATA_PATH, "img")
     
     # WhatsApp
     WHATSAPP_NUMBER = "5491158573906"
