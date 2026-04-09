@@ -436,7 +436,7 @@ def init_database():
         # (sqlite3.connect crea una DB nueva si no existe, lo cual queremos evitar)
         if not os.path.exists(Config.DATABASE_PATH):
             logger.error(f"❌ No se puede inicializar: la base de datos no existe en {Config.DATABASE_PATH}")
-            raise FileNotFoundError(f"Base de datos no encontrada: {Config.DATABASE_PATH}")
+            return
         
         with get_db_connection() as conn:
             cursor = conn.cursor()
