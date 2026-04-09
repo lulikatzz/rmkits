@@ -54,7 +54,7 @@ class Config:
     # Uploads (imágenes en almacenamiento persistente)
     UPLOAD_FOLDER = os.path.join(PERSISTENT_DATA_PATH, 'img')
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
-    MAX_CONTENT_LENGTH = 5 * 1024 * 1024  # 5MB máximo
+    MAX_CONTENT_LENGTH = 100 * 1024 * 1024  # 5MB máximo
     
     # Email
     MAIL_SERVER = os.environ.get('MAIL_SERVER') or 'smtp.gmail.com'
