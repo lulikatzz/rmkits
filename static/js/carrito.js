@@ -276,7 +276,7 @@ function renderCarrito() {
     
     fila.innerHTML = `
       <div class="cart-item-imagen">
-        ${p.imagen ? `<img src="/static/img/${p.imagen}" alt="${p.titulo}" onerror="this.parentElement.innerHTML='<div class=\\'sin-imagen\\'>Sin imagen</div>'">` : '<div class="sin-imagen">Sin imagen</div>'}
+        ${p.imagen ? `<img src="/uploads/${p.imagen}" alt="${p.titulo}" onerror="this.parentElement.innerHTML='<div class=\'sin-imagen\'>Sin imagen</div>'">` : '<div class="sin-imagen">Sin imagen</div>'}
       </div>
       <div class="cart-item-info">
         <h3 class="cart-item-titulo">${p.titulo}</h3>

@@ -488,7 +488,7 @@ async function buscarProductos(query) {
     searchResults.innerHTML = productos.map(p => `
       <div class="product-card" onclick="editarProducto(${p.id})">
         ${p.imagen ? 
-          `<img src="/static/img/${p.imagen}" class="product-card-img" alt="${p.titulo}">` :
+          `<img src="/uploads/${p.imagen}" class="product-card-img" alt="${p.titulo}">` :
           `<div class="product-card-img no-image">📦</div>`
         }
         <div class="product-card-info">

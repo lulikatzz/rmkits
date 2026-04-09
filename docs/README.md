@@ -1,0 +1,181 @@
+# RM KITS - Carrito de Compras Mayorista
+
+Aplicación web de carrito de compras mayorista desarrollada con Flask. Permite a los clientes mayoristas navegar productos, armar pedidos y enviarlos directamente por WhatsApp.
+
+## 🚀 Características
+
+- **Catálogo de productos** con filtros por categoría y búsqueda
+- **Carrito de compras** persistente con localStorage
+- **Validación de cantidades** según mínimos y múltiplos
+- **Paginación** de productos
+- **Envío de pedidos por WhatsApp** con formulario completo
+- **Diseño responsive** para móviles y tablets
+- **Gestión de stock** en tiempo real
+- **Importación de productos** desde Excel
+
+## 📋 Requisitos
+
+- Python 3.8+
+- pip
+- Archivo Excel con productos (`productos.xlsx`)
+
+## 🔧 Instalación
+
+1. **Clonar el repositorio**
+```bash
+git clone https://github.com/lulikatzz/rmkits.git
+cd rmkits
+```
+
+2. **Crear entorno virtual**
+```bash
+python -m venv venv
+```
+
+3. **Activar entorno virtual**
+
+Windows:
+```bash
+venv\Scripts\activate
+```
+
+Linux/Mac:
+```bash
+source venv/bin/activate
+```
+
+4. **Instalar dependencias**
+```bash
+pip install -r requirements.txt
+```
+
+5. **Importar productos desde Excel**
+```bash
+python importar_excel.py
+```
+
+## ▶️ Ejecutar en desarrollo
+
+```bash
+python app.py
+```
+
+La aplicación estará disponible en `http://localhost:5000`
+
+## 📦 Desplegar en producción
+
+### Heroku
+
+1. Crear aplicación en Heroku
+2. Conectar con el repositorio de GitHub
+3. Configurar variables de entorno (si es necesario)
+4. Deploy automático desde `main`
+
+### Otras plataformas
+
+El proyecto incluye:
+- `Procfile` para Heroku
+- `runtime.txt` con la versión de Python
+- `requirements.txt` con todas las dependencias
+
+## 📁 Estructura del proyecto
+
+```
+web_carrito/
+├── app.py                 # Aplicación Flask principal
+├── config.py              # Configuración centralizada
+├── importar_excel.py      # Script para importar productos
+├── requirements.txt       # Dependencias Python
+├── .gitignore            # Archivos a ignorar en git
+├── Procfile              # Configuración para Heroku
+├── runtime.txt           # Versión de Python
+├── templates/            # Templates HTML
+│   ├── index.html        # Página principal de productos
+│   ├── carrito.html      # Página del carrito
+│   └── error.html        # Página de errores
+├── static/              
+│   ├── css/
+│   │   └── style.css     # Estilos CSS organizados
+│   ├── js/
+│   │   ├── index.js      # JavaScript de la página principal
+│   │   └── carrito.js    # JavaScript del carrito
+│   └── img/              # Imágenes de productos y logo
+└── productos.db          # Base de datos SQLite (generada)
+```
+
+## 🛠️ Configuración
+
+### Variables de configuración
+
+Edita `config.py` para ajustar:
+- Número de WhatsApp
+- Pedido mínimo
+- Dirección del local
+- Costos de envío
+
+### Formato del archivo Excel
+
+El archivo `productos.xlsx` debe tener las siguientes columnas:
+- `codigo`: Código del producto
+- `titulo`: Nombre del producto
+- `descripcion`: Descripción (opcional)
+- `precio`: Precio unitario
+- `minimo`: Cantidad mínima de compra
+- `multiplo`: Múltiplo de venta (ej: 12 para cajas de 12)
+- `stock`: Stock disponible
+- `imagen`: Nombre del archivo de imagen
+- `categoria`: Categoría del producto
+
+## 🎨 Personalización
+
+### Colores principales
+
+Los colores principales se pueden modificar en `static/css/style.css`:
+- Morado principal: `#6a1b9a`
+- Morado oscuro: `#4a148c`
+- Amarillo badge: `#ffcc00`
+
+### Logo e imágenes
+
+Coloca tus imágenes en `static/img/`:
+- Logo: `logo.PNG`
+- Favicon: `iconorm.ico`
+- Productos: nombre especificado en el Excel
+
+## 📱 Funcionalidades del carrito
+
+### Validaciones automáticas
+
+- **Mínimo de compra**: Se valida que la cantidad sea >= al mínimo
+- **Múltiplos**: Solo permite cantidades en múltiplos especificados
+- **Stock**: Verifica disponibilidad antes de agregar
+- **Pedido mínimo**: $200.000 para checkout
+
+### Datos de envío
+
+El sistema solicita:
+- Datos de contacto (nombre, email)
+- Opción de retiro o envío
+- Si es envío: dirección completa y datos del destinatario
+
+## 🤝 Contribuir
+
+1. Fork el proyecto
+2. Crea una rama (`git checkout -b feature/mejora`)
+3. Commit cambios (`git commit -m 'Agrega nueva funcionalidad'`)
+4. Push a la rama (`git push origin feature/mejora`)
+5. Abre un Pull Request
+
+## 📄 Licencia
+
+Este proyecto es privado y pertenece a RM KITS.
+
+## 📞 Contacto
+
+- WhatsApp: +54 9 11 5857-3906
+- Dirección: Av. Rivadavia 2768, CABA
+- Horarios: Lun a Vie 9 a 18 hs. Sáb 9 a 15 hs.
+
+---
+
+Desarrollado con ❤️ para RM KITS

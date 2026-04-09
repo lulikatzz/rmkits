@@ -207,7 +207,7 @@ function renderProductos() {
     
     // Configurar elementos básicos
     card.dataset.categoria = normalizarCategoriaValor(p.categoria);
-    node.querySelector(".img").src = `/static/img/${p.imagen}`;
+    node.querySelector(".img").src = `/uploads/${p.imagen}`;
     node.querySelector(".img").alt = p.titulo;
     node.querySelector(".titulo").textContent = p.titulo;
     node.querySelector(".titulo").title = p.titulo;

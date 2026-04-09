@@ -95,7 +95,7 @@
         
         {% if producto and producto.imagen %}
         <div class="current-image">
-          <img src="/static/img/{{ producto.imagen }}" alt="{{ producto.titulo }}">
+          <img src="/uploads/{{ producto.imagen }}" alt="{{ producto.titulo }}">
           <input type="hidden" name="imagen_actual" value="{{ producto.imagen }}">
           <p class="text-muted">Imagen actual: {{ producto.imagen }}</p>
         </div>

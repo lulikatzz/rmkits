@@ -42,6 +42,9 @@ instance/
 *.sqlite
 *.sqlite3
 
+# Almacenamiento persistente (datos dinámicos)
+data/
+
 # Logs
 *.log
 pip-log.txt

@@ -1,7 +1,7 @@
 """
 Aplicación web de carrito de compras mayorista - RM KITS
 """
-from flask import Flask, render_template, request, jsonify, redirect, session, flash, url_for, send_file
+from flask import Flask, render_template, request, jsonify, redirect, session, flash, url_for, send_file, send_from_directory
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 import sqlite3
@@ -30,6 +30,43 @@ logger = logging.getLogger(__name__)
 # Inicializar Flask
 app = Flask(__name__)
 app.config.from_object(Config)
+
+
+# Inicializar carpetas de almacenamiento persistente
+def init_persistent_storage():
+    """Crea las carpetas de almacenamiento persistente si no existen"""
+    try:
+        # Crear carpeta principal de datos persistentes
+        os.makedirs(Config.PERSISTENT_DATA_PATH, exist_ok=True)
+        logger.info(f"✓ Carpeta persistente verificada: {Config.PERSISTENT_DATA_PATH}")
+        
+        # Crear carpeta de imágenes
+        os.makedirs(Config.UPLOAD_FOLDER, exist_ok=True)
+        logger.info(f"✓ Carpeta de imágenes verificada: {Config.UPLOAD_FOLDER}")
+        
+        # Si estamos en desarrollo y existe static/img, copiar imágenes a la nueva ubicación
+        if Config.PERSISTENT_DATA_PATH != '/data':
+            static_img = os.path.join('static', 'img')
+            if os.path.exists(static_img) and os.path.isdir(static_img):
+                for filename in os.listdir(static_img):
+                    src = os.path.join(static_img, filename)
+                    dst = os.path.join(Config.UPLOAD_FOLDER, filename)
+                    if os.path.isfile(src) and not os.path.exists(dst):
+                        shutil.copy2(src, dst)
+                logger.info("✓ Imágenes migradas desde static/img")
+        
+        # Si existe productos.db en la raíz, moverlo a la ubicación persistente
+        if os.path.exists('productos.db') and Config.DATABASE_PATH != 'productos.db':
+            if not os.path.exists(Config.DATABASE_PATH):
+                shutil.move('productos.db', Config.DATABASE_PATH)
+                logger.info(f"✓ Base de datos movida a: {Config.DATABASE_PATH}")
+        
+    except Exception as e:
+        logger.error(f"Error al inicializar almacenamiento persistente: {e}")
+
+
+# Inicializar al cargar la aplicación
+init_persistent_storage()
 
 
 # Context manager para manejo seguro de base de datos
@@ -312,7 +349,7 @@ def internal_error(e):
 
 def buscar_imagen_para_codigo(codigo):
     """
-    Busca si existe una imagen para el código dado en la carpeta static/img.
+    Busca si existe una imagen para el código dado en el almacenamiento persistente.
     Retorna el nombre del archivo si existe, o string vacío si no.
     """
     extensiones = ['.jpg', '.jpeg', '.png', '.webp', '.gif']
@@ -2196,6 +2233,13 @@ def admin_quitar_producto_nuevo(id):
         flash(f'Error: {str(e)}', 'error')
     
     return redirect(url_for('admin_productos_nuevos'))
+
+
+# Ruta para servir imágenes desde almacenamiento persistente
+@app.route('/uploads/<path:filename>')
+def uploaded_file(filename):
+    """Sirve imágenes desde la carpeta de almacenamiento persistente"""
+    return send_from_directory(Config.UPLOAD_FOLDER, filename)
 
 
 if __name__ == "__main__":

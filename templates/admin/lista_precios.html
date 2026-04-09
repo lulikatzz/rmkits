@@ -322,7 +322,7 @@
           <tr class="product-row" data-product-name="{{ producto.titulo|lower }}" data-product-code="{{ producto.codigo|lower }}">
             <td class="product-image-cell">
               {% if producto.imagen %}
-                <img src="/static/img/{{ producto.imagen }}" alt="{{ producto.titulo }}" onerror="this.outerHTML='<div class=\'no-image-small\'>Sin img</div>'">
+                <img src="/uploads/{{ producto.imagen }}" alt="{{ producto.titulo }}" onerror="this.outerHTML='<div class=\'no-image-small\'>Sin img</div>'">
               {% else %}
                 <div class="no-image-small">Sin img</div>
               {% endif %}

@@ -62,7 +62,7 @@
         </td>
         <td class="img-cell">
           {% if producto.imagen %}
-            <img src="/static/img/{{ producto.imagen }}" alt="{{ producto.titulo }}" class="product-thumb" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'">
+            <img src="/uploads/{{ producto.imagen }}" alt="{{ producto.titulo }}" class="product-thumb" onerror="this.style.display='none';this.nextElementSibling.style.display='inline'">
             <span class="no-image" style="display:none">Sin imagen</span>
           {% else %}
             <span class="no-image">Sin imagen</span>

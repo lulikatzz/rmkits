@@ -6,8 +6,13 @@ import os
 class Config:
     """Configuración base de la aplicación"""
     
-    # Base de datos
-    DATABASE_PATH = "productos.db"
+    # Rutas persistentes (montadas en disco persistente de Render)
+    # En desarrollo usa carpeta local, en producción usa /data
+    # Si la variable de entorno no está definida, usa 'data' (carpeta local para desarrollo)
+    PERSISTENT_DATA_PATH = os.environ.get('PERSISTENT_DATA_PATH', 'data')
+    
+    # Base de datos (en almacenamiento persistente)
+    DATABASE_PATH = os.path.join(PERSISTENT_DATA_PATH, 'productos.db')
     
     # WhatsApp
     WHATSAPP_NUMBER = "5491158573906"
@@ -40,8 +45,8 @@ class Config:
     ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME') or 'admin'
     ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD') or 'rmkits2024'
     
-    # Uploads
-    UPLOAD_FOLDER = os.path.join('static', 'img')
+    # Uploads (imágenes en almacenamiento persistente)
+    UPLOAD_FOLDER = os.path.join(PERSISTENT_DATA_PATH, 'img')
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
     MAX_CONTENT_LENGTH = 5 * 1024 * 1024  # 5MB máximo
     
