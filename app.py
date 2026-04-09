@@ -91,12 +91,9 @@ def init_persistent_storage():
         logger.info("✅ Inicialización completada correctamente")
         logger.info("="*60)
         
-    except FileNotFoundError:
-        # Re-lanzar el error de DB no encontrada
-        raise
     except Exception as e:
         logger.error(f"❌ Error al inicializar almacenamiento persistente: {e}")
-        raise
+        logger.warning("⚠️  La app arrancará de todos modos. Usá /restaurar para subir la base de datos.")
 
 
 # Inicializar al cargar la aplicación
@@ -829,7 +826,14 @@ def init_database():
         # Verificar que la DB ya existe antes de conectar
         # (sqlite3.connect crea una DB nueva si no existe, lo cual queremos evitar)
         if not os.path.exists(Config.DATABASE_PATH):
-            logger.error(f"❌ No se puede inicializar: la base de datos no existe en {Config.DATABASE_PATH}")
+            logger.warning(f"⚠️  Base de datos no existe en {Config.DATABASE_PATH} - saltando init_database")
+            logger.warning("⚠️  Usá /restaurar para subir la base de datos")
+            return
+        
+        # Verificar que el archivo no esté vacío
+        if os.path.getsize(Config.DATABASE_PATH) == 0:
+            logger.warning("⚠️  Base de datos existe pero está vacía (0 bytes) - saltando init_database")
+            logger.warning("⚠️  Usá /restaurar para subir la base de datos")
             return
         
         with get_db_connection() as conn:
@@ -841,9 +845,9 @@ def init_database():
                 WHERE type='table' AND name='producto'
             """)
             if not cursor.fetchone():
-                logger.error("❌ ERROR: La base de datos no contiene la tabla 'producto'")
-                logger.error("❌ Parece que la base de datos está vacía o corrupta")
-                raise Exception("Base de datos inválida: falta la tabla 'producto'")
+                logger.warning("⚠️  La base de datos no contiene la tabla 'producto' - saltando init_database")
+                logger.warning("⚠️  Usá /restaurar para subir la base de datos correcta")
+                return
             
             logger.info("✓ Tabla 'producto' encontrada en la base de datos")
             
@@ -911,18 +915,27 @@ def init_database():
             
             conn.commit()
             logger.info("✓ Tablas de base de datos inicializadas correctamente")
-    except FileNotFoundError:
-        raise
     except Exception as e:
         logger.error(f"❌ Error al inicializar base de datos: {e}")
-        raise
+        logger.warning("⚠️  La app arrancará de todos modos. Usá /restaurar para subir la base de datos.")
 
 
 def migrar_categorias_existentes():
     """Migra las categorías existentes de los productos a la tabla de categorías"""
     try:
+        # No intentar migrar si la DB no existe o está vacía
+        if not os.path.exists(Config.DATABASE_PATH) or os.path.getsize(Config.DATABASE_PATH) == 0:
+            logger.warning("⚠️  Saltando migración de categorías: base de datos no disponible")
+            return
+        
         with get_db_connection() as conn:
             cursor = conn.cursor()
+            
+            # Verificar que la tabla producto existe antes de migrar
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='producto'")
+            if not cursor.fetchone():
+                logger.warning("⚠️  Saltando migración de categorías: tabla producto no existe")
+                return
             
             # Obtener categorías únicas de los productos
             cursor.execute("SELECT DISTINCT categoria FROM producto WHERE categoria IS NOT NULL AND categoria != '' ORDER BY categoria")
