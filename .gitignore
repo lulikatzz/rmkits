@@ -43,6 +43,7 @@ instance/
 *.sqlite3
 
 # Almacenamiento persistente (datos dinámicos)
+data/
 data/*.db
 data/*.sqlite
 data/*.sqlite3
