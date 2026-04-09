@@ -378,6 +378,400 @@ def internal_error(e):
 
 
 # =============================================================================
+# RUTA TEMPORAL DE RESTAURACIÓN (ELIMINAR DESPUÉS DE USAR)
+# =============================================================================
+
+@app.route("/restaurar", methods=["GET", "POST"])
+def restaurar_backup():
+    """
+    RUTA TEMPORAL: Restaura base de datos e imágenes desde un archivo ZIP.
+    Extrae productos.db -> /data/productos.db
+    Extrae img/* -> /data/img/
+    ⚠️ ELIMINAR ESTA RUTA DESPUÉS DE USARLA
+    """
+    if request.method == "GET":
+        # Mostrar formulario de carga
+        html = """
+        <!DOCTYPE html>
+        <html lang="es">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Restaurar Backup - RM KITS</title>
+            <style>
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body {
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    min-height: 100vh;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 20px;
+                }
+                .container {
+                    background: white;
+                    border-radius: 16px;
+                    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+                    padding: 40px;
+                    max-width: 600px;
+                    width: 100%;
+                }
+                h1 {
+                    color: #333;
+                    margin-bottom: 10px;
+                    font-size: 28px;
+                }
+                .warning {
+                    background: #fff3cd;
+                    border-left: 4px solid #ffc107;
+                    color: #856404;
+                    padding: 15px;
+                    margin: 20px 0;
+                    border-radius: 4px;
+                    font-size: 14px;
+                }
+                .info {
+                    background: #d1ecf1;
+                    border-left: 4px solid #17a2b8;
+                    color: #0c5460;
+                    padding: 15px;
+                    margin: 20px 0;
+                    border-radius: 4px;
+                    font-size: 14px;
+                }
+                .info ul {
+                    margin: 10px 0 0 20px;
+                }
+                .form-group {
+                    margin: 25px 0;
+                }
+                label {
+                    display: block;
+                    font-weight: 600;
+                    color: #555;
+                    margin-bottom: 8px;
+                }
+                input[type="file"] {
+                    width: 100%;
+                    padding: 12px;
+                    border: 2px dashed #ddd;
+                    border-radius: 8px;
+                    background: #f8f9fa;
+                    cursor: pointer;
+                    transition: all 0.3s;
+                }
+                input[type="file"]:hover {
+                    border-color: #667eea;
+                    background: #f0f0ff;
+                }
+                button {
+                    width: 100%;
+                    padding: 15px;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                    border: none;
+                    border-radius: 8px;
+                    font-size: 16px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    transition: transform 0.2s;
+                }
+                button:hover {
+                    transform: translateY(-2px);
+                    box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+                }
+                button:active {
+                    transform: translateY(0);
+                }
+                .footer {
+                    margin-top: 30px;
+                    text-align: center;
+                    color: #999;
+                    font-size: 13px;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>🔄 Restaurar Backup</h1>
+                <p style="color: #666; margin-top: 5px;">Sube un archivo ZIP con productos.db e imágenes</p>
+                
+                <div class="warning">
+                    <strong>⚠️ ADVERTENCIA:</strong> Esta operación reemplazará completamente la base de datos y las imágenes actuales. No se puede deshacer.
+                </div>
+                
+                <div class="info">
+                    <strong>📦 El archivo ZIP debe contener:</strong>
+                    <ul>
+                        <li><code>productos.db</code> (base de datos)</li>
+                        <li><code>img/</code> (carpeta con imágenes)</li>
+                    </ul>
+                    <p style="margin-top: 10px;"><strong>Se extraerá a:</strong></p>
+                    <ul>
+                        <li>→ <code>/data/productos.db</code></li>
+                        <li>→ <code>/data/img/</code></li>
+                    </ul>
+                </div>
+                
+                <form method="POST" enctype="multipart/form-data">
+                    <div class="form-group">
+                        <label for="backup_zip">Seleccionar archivo ZIP:</label>
+                        <input type="file" id="backup_zip" name="backup_zip" accept=".zip" required>
+                    </div>
+                    
+                    <button type="submit">🚀 Restaurar Backup</button>
+                </form>
+                
+                <div class="footer">
+                    RM KITS - Sistema de Restauración Temporal
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        return html
+    
+    # POST: Procesar el archivo ZIP
+    try:
+        # Validar que se haya subido un archivo
+        if 'backup_zip' not in request.files:
+            return """
+            <html>
+            <body style="font-family: Arial; padding: 40px; text-align: center;">
+                <h2 style="color: #dc3545;">❌ Error</h2>
+                <p>No se seleccionó ningún archivo</p>
+                <a href="/restaurar" style="display: inline-block; margin-top: 20px; padding: 10px 20px; background: #667eea; color: white; text-decoration: none; border-radius: 5px;">← Volver</a>
+            </body>
+            </html>
+            """, 400
+        
+        file = request.files['backup_zip']
+        
+        # Validar que el archivo tenga nombre
+        if file.filename == '':
+            return """
+            <html>
+            <body style="font-family: Arial; padding: 40px; text-align: center;">
+                <h2 style="color: #dc3545;">❌ Error</h2>
+                <p>No se seleccionó ningún archivo</p>
+                <a href="/restaurar" style="display: inline-block; margin-top: 20px; padding: 10px 20px; background: #667eea; color: white; text-decoration: none; border-radius: 5px;">← Volver</a>
+            </body>
+            </html>
+            """, 400
+        
+        # Validar extensión .zip
+        if not file.filename.lower().endswith('.zip'):
+            return """
+            <html>
+            <body style="font-family: Arial; padding: 40px; text-align: center;">
+                <h2 style="color: #dc3545;">❌ Error</h2>
+                <p>El archivo debe ser un ZIP (.zip)</p>
+                <a href="/restaurar" style="display: inline-block; margin-top: 20px; padding: 10px 20px; background: #667eea; color: white; text-decoration: none; border-radius: 5px;">← Volver</a>
+            </body>
+            </html>
+            """, 400
+        
+        # Leer el ZIP en memoria
+        logger.info(f"📦 Procesando archivo: {file.filename}")
+        zip_data = BytesIO(file.read())
+        
+        # Contadores
+        db_restaurada = False
+        imagenes_restauradas = 0
+        archivos_ignorados = 0
+        
+        # Crear carpeta de imágenes si no existe
+        os.makedirs(Config.UPLOAD_FOLDER, exist_ok=True)
+        
+        # Extraer archivos del ZIP
+        with zipfile.ZipFile(zip_data, 'r') as zip_ref:
+            archivos_zip = zip_ref.namelist()
+            logger.info(f"Archivos en el ZIP: {len(archivos_zip)}")
+            
+            for archivo in archivos_zip:
+                # Ignorar carpetas vacías
+                if archivo.endswith('/'):
+                    continue
+                
+                # Obtener el nombre base del archivo (sin rutas)
+                nombre_archivo = os.path.basename(archivo)
+                
+                # Restaurar productos.db
+                if nombre_archivo == 'productos.db' or archivo.endswith('/productos.db'):
+                    logger.info(f"✓ Extrayendo base de datos: {archivo}")
+                    with zip_ref.open(archivo) as source:
+                        with open(Config.DATABASE_PATH, 'wb') as target:
+                            shutil.copyfileobj(source, target)
+                    db_restaurada = True
+                    logger.info(f"✅ Base de datos restaurada en: {Config.DATABASE_PATH}")
+                
+                # Restaurar imágenes de la carpeta img/
+                elif '/img/' in archivo or archivo.startswith('img/'):
+                    if nombre_archivo:  # Asegurar que no sea una carpeta vacía
+                        logger.info(f"✓ Extrayendo imagen: {nombre_archivo}")
+                        destino = os.path.join(Config.UPLOAD_FOLDER, nombre_archivo)
+                        with zip_ref.open(archivo) as source:
+                            with open(destino, 'wb') as target:
+                                shutil.copyfileobj(source, target)
+                        imagenes_restauradas += 1
+                
+                else:
+                    archivos_ignorados += 1
+                    logger.info(f"ℹ️ Ignorado: {archivo}")
+        
+        # Generar resultado
+        resultado_html = f"""
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Restauración Completada</title>
+            <style>
+                * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+                body {{
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    min-height: 100vh;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 20px;
+                }}
+                .container {{
+                    background: white;
+                    border-radius: 16px;
+                    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+                    padding: 40px;
+                    max-width: 600px;
+                    width: 100%;
+                }}
+                h1 {{
+                    color: #28a745;
+                    margin-bottom: 20px;
+                    font-size: 32px;
+                }}
+                .stats {{
+                    background: #f8f9fa;
+                    border-radius: 8px;
+                    padding: 20px;
+                    margin: 20px 0;
+                }}
+                .stat {{
+                    display: flex;
+                    justify-content: space-between;
+                    padding: 10px 0;
+                    border-bottom: 1px solid #e0e0e0;
+                }}
+                .stat:last-child {{
+                    border-bottom: none;
+                }}
+                .label {{
+                    font-weight: 600;
+                    color: #555;
+                }}
+                .value {{
+                    color: #667eea;
+                    font-weight: 700;
+                }}
+                .success {{
+                    background: #d4edda;
+                    color: #155724;
+                    padding: 15px;
+                    border-radius: 8px;
+                    border-left: 4px solid #28a745;
+                    margin: 20px 0;
+                }}
+                .warning {{
+                    background: #fff3cd;
+                    color: #856404;
+                    padding: 15px;
+                    border-radius: 8px;
+                    border-left: 4px solid #ffc107;
+                    margin: 20px 0;
+                }}
+                .button {{
+                    display: inline-block;
+                    margin: 10px 5px;
+                    padding: 12px 24px;
+                    background: #667eea;
+                    color: white;
+                    text-decoration: none;
+                    border-radius: 8px;
+                    font-weight: 600;
+                    transition: transform 0.2s;
+                }}
+                .button:hover {{
+                    transform: translateY(-2px);
+                }}
+                .button.secondary {{
+                    background: #6c757d;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>✅ Restauración Completada</h1>
+                
+                <div class="stats">
+                    <div class="stat">
+                        <span class="label">📄 Base de datos:</span>
+                        <span class="value">{'✓ Restaurada' if db_restaurada else '✗ No encontrada'}</span>
+                    </div>
+                    <div class="stat">
+                        <span class="label">🖼️ Imágenes restauradas:</span>
+                        <span class="value">{imagenes_restauradas}</span>
+                    </div>
+                    <div class="stat">
+                        <span class="label">⏭️ Archivos ignorados:</span>
+                        <span class="value">{archivos_ignorados}</span>
+                    </div>
+                </div>
+                
+                {'<div class="success"><strong>✓ Base de datos restaurada correctamente</strong><br>Ubicación: ' + Config.DATABASE_PATH + '</div>' if db_restaurada else '<div class="warning"><strong>⚠️ No se encontró productos.db en el ZIP</strong></div>'}
+                
+                {'<div class="success"><strong>✓ Imágenes restauradas</strong><br>Ubicación: ' + Config.UPLOAD_FOLDER + '</div>' if imagenes_restauradas > 0 else ''}
+                
+                <div style="text-align: center; margin-top: 30px;">
+                    <a href="/" class="button">🏠 Ir al inicio</a>
+                    <a href="/admin/login" class="button secondary">🔐 Panel Admin</a>
+                </div>
+                
+                <div style="margin-top: 30px; padding: 15px; background: #fff3cd; border-radius: 8px; font-size: 14px; color: #856404;">
+                    <strong>⚠️ Recordatorio:</strong> Elimina la ruta /restaurar del código después de usar.
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        return resultado_html
+        
+    except zipfile.BadZipFile:
+        logger.error("❌ Archivo ZIP corrupto o inválido")
+        return """
+        <html>
+        <body style="font-family: Arial; padding: 40px; text-align: center;">
+            <h2 style="color: #dc3545;">❌ Error</h2>
+            <p>El archivo no es un ZIP válido o está corrupto</p>
+            <a href="/restaurar" style="display: inline-block; margin-top: 20px; padding: 10px 20px; background: #667eea; color: white; text-decoration: none; border-radius: 5px;">← Volver</a>
+        </body>
+        </html>
+        """, 400
+    except Exception as e:
+        logger.error(f"❌ Error al restaurar backup: {e}")
+        return f"""
+        <html>
+        <body style="font-family: Arial; padding: 40px; text-align: center;">
+            <h2 style="color: #dc3545;">❌ Error</h2>
+            <p>Error al procesar el backup: {str(e)}</p>
+            <a href="/restaurar" style="display: inline-block; margin-top: 20px; padding: 10px 20px; background: #667eea; color: white; text-decoration: none; border-radius: 5px;">← Volver</a>
+        </body>
+        </html>
+        """, 500
+
+
+# =============================================================================
 # FUNCIONES AUXILIARES
 # =============================================================================
 
