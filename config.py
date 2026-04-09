@@ -12,7 +12,7 @@ class Config:
     RENDER = os.environ.get("RENDER", "false").lower() == "true"
 
     # En Render usar disk persistente; en local usar carpeta data
-    PERSISTENT_DATA_PATH = "/data" if RENDER else "data"
+    PERSISTENT_DATA_PATH = "/data"
 
     # Base de datos
     DATABASE_PATH = os.path.join(PERSISTENT_DATA_PATH, "productos.db")
