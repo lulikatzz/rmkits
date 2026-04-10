@@ -130,7 +130,7 @@ def get_productos():
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM producto WHERE stock > 0 AND activo = 1 ORDER BY codigo DESC")
+            cursor.execute("SELECT * FROM producto WHERE stock > 0 AND activo = 1 ORDER BY codigo ASC")
             filas = cursor.fetchall()
             productos = [dict(fila) for fila in filas]
             return productos
