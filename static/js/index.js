@@ -13,6 +13,7 @@ let productosFiltrados = [];
 let paginaActual = 1;
 let textoBusqueda = "";
 let filtroCategoria = "";
+let ordenActual = "";
 
 // Elementos del DOM
 const cont = document.getElementById("productos");
@@ -149,6 +150,12 @@ function aplicarFiltro() {
     const tieneStock = p.stock > 0;
     return coincideTexto && coincideCat && tieneStock;
   });
+
+  if (ordenActual === "precio-asc") {
+    productosFiltrados.sort((a, b) => a.precio - b.precio);
+  } else if (ordenActual === "precio-desc") {
+    productosFiltrados.sort((a, b) => b.precio - a.precio);
+  }
   
   paginaActual = 1;
   renderProductos();
@@ -329,6 +336,11 @@ document.addEventListener("DOMContentLoaded", () => {
   // Event listeners
   document.getElementById("filtro").addEventListener("input", e => {
     textoBusqueda = e.target.value;
+    aplicarFiltro();
+  });
+
+  document.getElementById("ordenar").addEventListener("change", e => {
+    ordenActual = e.target.value;
     aplicarFiltro();
   });
 

@@ -639,7 +639,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const mensaje = armarMensajeWhatsApp();
     const urlWhatsApp = `https://wa.me/${WHATSAPP_NUMERO}?text=${mensaje}`;
-    const whatsappTab = window.open("about:blank", "_blank");
 
     const metodoEntrega = obtenerEntregaSeleccionada();
     const total = calcularTotal();
@@ -679,22 +678,19 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       if (!response.ok || !result.success) {
-        if (whatsappTab && !whatsappTab.closed) whatsappTab.close();
         alert("Hubo un error al registrar tu pedido. Por favor, intentá nuevamente.");
         return false;
       }
     } catch (err) {
       console.error("Error al guardar pedido:", err);
-      if (whatsappTab && !whatsappTab.closed) whatsappTab.close();
       alert("Hubo un error al registrar tu pedido. Por favor, intentá nuevamente.");
       return false;
     }
 
-    if (whatsappTab && !whatsappTab.closed) {
-      whatsappTab.location.href = urlWhatsApp;
-    } else {
-      window.open(urlWhatsApp, "_blank");
-    }
+    // Navegar la pestaña actual a WhatsApp. No usamos window.open() porque
+    // luego del await se pierde la activación del usuario y Android Chrome
+    // bloquea los popups; la navegación de la pestaña actual siempre funciona.
+    window.location.href = urlWhatsApp;
   });
 
   // Prevenir zoom con doble tap en móviles

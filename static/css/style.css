@@ -123,6 +123,18 @@ header h1 {
   flex: 1 1 250px;
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
+}
+
+#ordenar {
+  padding: 6px 10px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  background: #fff;
+  color: #333;
+  font-size: 0.9rem;
+  cursor: pointer;
+  max-width: 220px;
 }
 
 #filtro {
