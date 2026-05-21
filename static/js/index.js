@@ -152,9 +152,9 @@ function aplicarFiltro() {
   });
 
   if (ordenActual === "precio-asc") {
-    productosFiltrados.sort((a, b) => a.precio - b.precio);
+    productosFiltrados.sort((a, b) => Number(a.precio) - Number(b.precio));
   } else if (ordenActual === "precio-desc") {
-    productosFiltrados.sort((a, b) => b.precio - a.precio);
+    productosFiltrados.sort((a, b) => Number(b.precio) - Number(a.precio));
   }
   
   paginaActual = 1;

@@ -32,6 +32,18 @@ app = Flask(__name__)
 app.config.from_object(Config)
 
 
+@app.context_processor
+def inject_asset_version():
+    """Expone una versión de assets para cache-busting (mtime de archivos estáticos)."""
+    def asset_version(filename):
+        try:
+            path = os.path.join(app.static_folder, filename)
+            return int(os.path.getmtime(path))
+        except OSError:
+            return 0
+    return {"asset_version": asset_version}
+
+
 # Inicializar carpetas de almacenamiento persistente
 def init_persistent_storage():
     """Crea las carpetas de almacenamiento persistente si no existen y verifica la DB"""
