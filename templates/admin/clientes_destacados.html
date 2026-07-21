@@ -80,7 +80,13 @@
             {{ cliente.primer_pedido[:10] }}
             <div class="sub">→ {{ cliente.ultimo_pedido[:10] }}</div>
           </td>
-          <td>
+          <td class="nowrap">
+            {% if cliente.whatsapp %}
+            <a href="https://wa.me/{{ cliente.whatsapp }}" target="_blank" rel="noopener"
+               class="btn-wsp" title="Abrir chat de WhatsApp con {{ cliente.telefono_principal }}">
+              💬 WhatsApp
+            </a>
+            {% endif %}
             <button type="button" class="btn-ver"
                     onclick="toggleDetalle('{{ cliente.clave }}', this)">
               Ver pedidos
@@ -281,6 +287,24 @@ function toggleDetalle(clave, boton) {
 
 .btn-ver:hover {
   background: #6a1b9a;
+  color: white;
+}
+
+.btn-wsp {
+  display: inline-block;
+  padding: 3px 9px;
+  margin-right: 4px;
+  font-size: 12px;
+  border: 1px solid #25d366;
+  background: white;
+  color: #128c46;
+  border-radius: 4px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.btn-wsp:hover {
+  background: #25d366;
   color: white;
 }
 

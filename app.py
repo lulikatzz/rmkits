@@ -2358,6 +2358,37 @@ def normalizar_telefono(telefono):
     return digitos[-DIGITOS_CLAVE_TELEFONO:]
 
 
+def telefono_whatsapp(telefono):
+    """
+    Arma el número en el formato que necesita wa.me (solo dígitos, con código de país).
+    Asume números argentinos: agrega 54 y el 9 de celular si no vienen.
+    Ej: '(011) 6655-4477' -> '5491166554477'
+    Retorna '' si el teléfono no alcanza para armar un link (ej: sin característica).
+    """
+    digitos = ''.join(c for c in (telefono or '') if c.isdigit())
+
+    if digitos.startswith('00'):
+        digitos = digitos[2:]
+
+    if digitos.startswith('54'):
+        resto = digitos[2:]
+    else:
+        # Sacar el 0 de larga distancia nacional: (011) -> 11
+        resto = digitos.lstrip('0')
+
+    # Un número nacional completo tiene 10 dígitos (característica + abonado).
+    # Si vino sin característica no podemos inventarla, así que no armamos el link.
+    sin_nueve = resto[1:] if resto.startswith('9') else resto
+    if len(sin_nueve) < 10:
+        return ''
+
+    # El 9 indica celular en Argentina
+    if not resto.startswith('9'):
+        resto = '9' + resto
+
+    return '54' + resto
+
+
 def contar_pedidos_concretados_por_cliente(cursor):
     """
     Devuelve {clave_telefono: cantidad de pedidos concretados}, usando el mismo
@@ -2445,9 +2476,11 @@ def admin_clientes_destacados():
             cliente['otros_nombres'] = [
                 n for n in cliente['nombres'] if n != cliente['nombre_principal']
             ]
+            # El último número que usó es el del pedido más reciente
             cliente['telefono_principal'] = (
-                cliente['telefonos'][-1] if cliente['telefonos'] else ''
+                (cliente['pedidos'][-1].get('cliente_telefono') or '').strip()
             )
+            cliente['whatsapp'] = telefono_whatsapp(cliente['telefono_principal'])
 
         destacados.sort(
             key=lambda c: (c['cantidad_pedidos'], c['total_gastado']),
