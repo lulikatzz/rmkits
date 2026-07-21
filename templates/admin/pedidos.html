@@ -112,7 +112,15 @@
           <tr>
             <td>{{ pedido.id }}</td>
             <td>{{ pedido.fecha[:16] if pedido.fecha else '' }}</td>
-            <td><strong>{{ pedido.cliente_nombre }}</strong></td>
+            <td>
+              <strong>{{ pedido.cliente_nombre }}</strong>
+              {% if pedido.pedidos_cliente >= 2 %}
+              <a href="{{ url_for('admin_clientes_destacados') }}" class="badge-recurrente"
+                 title="Cliente recurrente: {{ pedido.pedidos_cliente }} pedidos concretados. Ver clientes destacados.">
+                ⭐ {{ pedido.pedidos_cliente }} pedidos
+              </a>
+              {% endif %}
+            </td>
             <td>{{ pedido.cliente_telefono }}</td>
             <td class="price">${{ "{:,.0f}".format(pedido.total) }}</td>
             <td>
@@ -153,7 +161,15 @@
       <div class="card-body">
         <div class="info-row">
           <span class="label">👤</span>
-          <span class="value"><strong>{{ pedido.cliente_nombre }}</strong></span>
+          <span class="value">
+            <strong>{{ pedido.cliente_nombre }}</strong>
+            {% if pedido.pedidos_cliente >= 2 %}
+            <a href="{{ url_for('admin_clientes_destacados') }}" class="badge-recurrente"
+               title="Cliente recurrente: {{ pedido.pedidos_cliente }} pedidos concretados">
+              ⭐ {{ pedido.pedidos_cliente }} pedidos
+            </a>
+            {% endif %}
+          </span>
         </div>
         <div class="info-row">
           <span class="label">📞</span>
@@ -882,6 +898,27 @@ document.addEventListener('keydown', function(e) {
   font-size: 12px;
   font-weight: 600;
   display: inline-block;
+}
+
+.badge-recurrente {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 20px;
+  background: #ede7f6;
+  color: #4527a0;
+  border: 1px solid #d1c4e9;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-decoration: none;
+  vertical-align: middle;
+}
+
+.badge-recurrente:hover {
+  background: #6a1b9a;
+  color: white;
+  border-color: #6a1b9a;
 }
 
 .badge-pendiente {

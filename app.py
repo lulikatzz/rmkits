@@ -1304,7 +1304,19 @@ def admin_pedidos():
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM pedido ORDER BY fecha DESC")
             pedidos = [dict(row) for row in cursor.fetchall()]
-            
+
+            # Cuántos pedidos concretados tiene el cliente de cada pedido,
+            # con el mismo criterio que la sección Clientes Destacados.
+            # Solo se marcan los pedidos que están en alguno de esos estados.
+            conteos = contar_pedidos_concretados_por_cliente(cursor)
+            for pedido in pedidos:
+                estado = (pedido.get('estado') or '').strip().lower()
+                clave = normalizar_telefono(pedido.get('cliente_telefono'))
+                if estado in ESTADOS_PEDIDO_REALIZADO and clave:
+                    pedido['pedidos_cliente'] = conteos.get(clave, 0)
+                else:
+                    pedido['pedidos_cliente'] = 0
+
             return render_template("admin/pedidos.html", pedidos=pedidos)
     except Exception as e:
         logger.error(f"Error al obtener pedidos: {e}")
@@ -2344,6 +2356,26 @@ def normalizar_telefono(telefono):
     if len(digitos) < DIGITOS_CLAVE_TELEFONO:
         return None
     return digitos[-DIGITOS_CLAVE_TELEFONO:]
+
+
+def contar_pedidos_concretados_por_cliente(cursor):
+    """
+    Devuelve {clave_telefono: cantidad de pedidos concretados}, usando el mismo
+    criterio que Clientes Destacados (estados concretados + últimos dígitos del teléfono).
+    """
+    placeholders = ', '.join('?' for _ in ESTADOS_PEDIDO_REALIZADO)
+    cursor.execute(f"""
+        SELECT cliente_telefono
+        FROM pedido
+        WHERE LOWER(TRIM(COALESCE(estado, ''))) IN ({placeholders})
+    """, ESTADOS_PEDIDO_REALIZADO)
+
+    conteos = {}
+    for row in cursor.fetchall():
+        clave = normalizar_telefono(row['cliente_telefono'])
+        if clave:
+            conteos[clave] = conteos.get(clave, 0) + 1
+    return conteos
 
 
 @app.route("/admin/clientes-destacados")
