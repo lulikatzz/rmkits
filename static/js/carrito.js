@@ -578,8 +578,6 @@ const INFO_RETIRO_HTML = `
 
 const INFO_ENVIO_HTML = `
   <p><strong>Envíos</strong></p>
-  <p><strong>CABA:</strong> $6.000</p>
-  <p><strong>Gran Buenos Aires:</strong> $10.000</p>
   <p><strong>Interior del País:</strong> Vía ViaCargo (se abona al recibir).</p>
   <p><strong>Plazo:</strong> Se despacha entre 1 y 2 días hábiles luego de recibir el pago.</p>
   <p><strong>Método de pago:</strong> Transferencia bancaria.</p>
