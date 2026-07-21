@@ -1,0 +1,320 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Clientes Destacados{% endblock %}
+{% block page_title %}⭐ Clientes Destacados{% endblock %}
+
+{% block header_actions %}
+<a href="{{ url_for('admin_dashboard') }}" class="btn btn-secondary">← Volver</a>
+{% endblock %}
+
+{% block content %}
+<div class="clientes-container">
+
+  <div class="table-info">
+    <p>
+      Clientes que ya hicieron <strong>2 o más pedidos concretados</strong>
+      (estados: pagado, completado, preparado, señado, impreso, preparando o confirmado).
+    </p>
+    <p class="text-muted">
+      Se considera el mismo cliente cuando coinciden los últimos {{ digitos_clave }} dígitos
+      del teléfono, aunque el pedido haya sido hecho con otro nombre.
+    </p>
+  </div>
+
+  {% if clientes|length == 0 %}
+  <div class="alert alert-info">
+    <p>Todavía no hay clientes con 2 o más pedidos concretados.</p>
+  </div>
+  {% else %}
+
+  {% set total_pedidos = clientes|sum(attribute='cantidad_pedidos') %}
+  {% set total_facturado = clientes|sum(attribute='total_gastado') %}
+  <div class="stats-bar">
+    <div class="stat-card">
+      <div class="stat-value">{{ clientes|length }}</div>
+      <div class="stat-label">Clientes destacados</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">{{ total_pedidos }}</div>
+      <div class="stat-label">Pedidos concretados</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">${{ "{:,.0f}".format(total_facturado) }}</div>
+      <div class="stat-label">Facturado por ellos</div>
+    </div>
+  </div>
+
+  <div class="table-responsive">
+    <table class="clientes-table">
+      <thead>
+        <tr>
+          <th>Cliente</th>
+          <th>Teléfono</th>
+          <th>Email</th>
+          <th class="center">Pedidos</th>
+          <th>Total gastado</th>
+          <th>Ticket promedio</th>
+          <th>Primer pedido</th>
+          <th>Último pedido</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for cliente in clientes %}
+        <tr class="cliente-row">
+          <td>
+            <strong>{{ cliente.nombre_principal }}</strong>
+            {% if cliente.otros_nombres %}
+            <div class="otros-nombres" title="Pedidos hechos también con estos nombres">
+              también como: {{ cliente.otros_nombres|join(', ') }}
+            </div>
+            {% endif %}
+          </td>
+          <td>
+            {{ cliente.telefono_principal }}
+            {% if cliente.telefonos|length > 1 %}
+            <div class="otros-nombres">
+              otros: {{ cliente.telefonos[:-1]|join(', ') }}
+            </div>
+            {% endif %}
+          </td>
+          <td>{{ cliente.emails|join(', ') or '-' }}</td>
+          <td class="center"><span class="badge badge-conteo">{{ cliente.cantidad_pedidos }}</span></td>
+          <td class="price">${{ "{:,.0f}".format(cliente.total_gastado) }}</td>
+          <td>${{ "{:,.0f}".format(cliente.ticket_promedio) }}</td>
+          <td>{{ cliente.primer_pedido[:10] }}</td>
+          <td>{{ cliente.ultimo_pedido[:10] }}</td>
+          <td>
+            <button type="button" class="btn btn-sm btn-primary"
+                    onclick="toggleDetalle('{{ cliente.clave }}', this)">
+              Ver pedidos
+            </button>
+          </td>
+        </tr>
+        <tr class="detalle-row" id="detalle-{{ cliente.clave }}" style="display:none">
+          <td colspan="9">
+            <table class="pedidos-cliente-table">
+              <thead>
+                <tr>
+                  <th>Pedido</th>
+                  <th>Fecha</th>
+                  <th>Nombre usado</th>
+                  <th>Entrega</th>
+                  <th>Estado</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for pedido in cliente.pedidos|reverse %}
+                <tr>
+                  <td><strong>#{{ pedido.id }}</strong></td>
+                  <td>{{ pedido.fecha[:16] if pedido.fecha else '' }}</td>
+                  <td>{{ pedido.cliente_nombre }}</td>
+                  <td>{{ pedido.metodo_entrega|replace('retiro', 'Retiro')|replace('envio', 'Envío') if pedido.metodo_entrega else '-' }}</td>
+                  <td><span class="badge badge-{{ pedido.estado }}">{{ pedido.estado|capitalize }}</span></td>
+                  <td class="price">${{ "{:,.0f}".format(pedido.total) }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {% if pedidos_sin_telefono > 0 %}
+  <div class="download-info">
+    <p class="text-muted">
+      ⚠️ {{ pedidos_sin_telefono }} pedido(s) concretado(s) quedaron fuera de este listado porque
+      el teléfono cargado tiene menos de {{ digitos_clave }} dígitos y no permite identificar al cliente.
+    </p>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+function toggleDetalle(clave, boton) {
+  const fila = document.getElementById('detalle-' + clave);
+  const visible = fila.style.display !== 'none';
+  fila.style.display = visible ? 'none' : 'table-row';
+  boton.textContent = visible ? 'Ver pedidos' : 'Ocultar';
+}
+</script>
+
+<style>
+.clientes-container {
+  padding: 20px;
+}
+
+.table-info {
+  background: #f8f9fa;
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+.table-info p {
+  margin: 5px 0;
+}
+
+.text-muted {
+  color: #6c757d;
+  font-size: 14px;
+}
+
+.alert {
+  padding: 20px;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.alert-info {
+  background-color: #d1ecf1;
+  border: 1px solid #bee5eb;
+  color: #0c5460;
+}
+
+.stats-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.stat-card {
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  text-align: center;
+}
+
+.stat-value {
+  font-size: 26px;
+  font-weight: 700;
+  color: #6a1b9a;
+}
+
+.stat-label {
+  font-size: 13px;
+  color: #6c757d;
+  margin-top: 4px;
+}
+
+.table-responsive {
+  overflow-x: auto;
+  margin-bottom: 20px;
+}
+
+.clientes-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.clientes-table thead {
+  background: #6a1b9a;
+  color: white;
+}
+
+.clientes-table th,
+.clientes-table td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid #ddd;
+  vertical-align: top;
+}
+
+.clientes-table .center {
+  text-align: center;
+}
+
+.cliente-row:hover {
+  background-color: #f8f9fa;
+}
+
+.otros-nombres {
+  font-size: 12px;
+  color: #6c757d;
+  margin-top: 4px;
+}
+
+.price {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.detalle-row td {
+  background: #f5f2f8;
+  padding: 15px;
+}
+
+.pedidos-cliente-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.pedidos-cliente-table th,
+.pedidos-cliente-table td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+  font-size: 14px;
+}
+
+.pedidos-cliente-table thead {
+  background: #ede7f6;
+  color: #4527a0;
+}
+
+/* Badges */
+.badge {
+  padding: 5px 11px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.badge-conteo {
+  background: #ede7f6;
+  color: #4527a0;
+}
+
+.badge-confirmado { background: #d1f2eb; color: #0c5460; }
+.badge-preparando { background: #e2d9f3; color: #59359a; }
+.badge-impreso    { background: #e1bee7; color: #6a1b9a; }
+.badge-señado     { background: #ffccbc; color: #bf360c; }
+.badge-preparado  { background: #d1c4e9; color: #4527a0; }
+.badge-pagado     { background: #d4edda; color: #155724; }
+.badge-completado { background: #d4edda; color: #155724; }
+
+.download-info {
+  background: #fff3cd;
+  padding: 15px;
+  border-radius: 8px;
+  border: 1px solid #ffc107;
+}
+
+@media (max-width: 768px) {
+  .clientes-container {
+    padding: 10px;
+  }
+  .clientes-table th,
+  .clientes-table td {
+    padding: 8px;
+    font-size: 13px;
+  }
+}
+</style>
+{% endblock %}

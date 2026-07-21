@@ -34,6 +34,10 @@
           <span class="icon">🆕</span>
           <span>Productos Nuevos</span>
         </a>
+        <a href="{{ url_for('admin_clientes_destacados') }}" class="nav-item {% if request.endpoint == 'admin_clientes_destacados' %}active{% endif %}">
+          <span class="icon">⭐</span>
+          <span>Clientes Destacados</span>
+        </a>
         <a href="{{ url_for('admin_pedidos') }}" class="nav-item {% if 'pedido' in request.endpoint %}active{% endif %}">
           <span class="icon">📝</span>
           <span>Pedidos</span>

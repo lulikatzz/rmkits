@@ -2319,6 +2319,121 @@ def admin_quitar_producto_nuevo(id):
     return redirect(url_for('admin_productos_nuevos'))
 
 
+# =============================================================================
+# CLIENTES DESTACADOS
+# =============================================================================
+
+# Estados que cuentan como "pedido realizado" para clientes destacados
+ESTADOS_PEDIDO_REALIZADO = (
+    'pagado', 'completado', 'preparado', 'señado',
+    'impreso', 'preparando', 'confirmado'
+)
+
+# Dígitos finales del teléfono que se usan para identificar al mismo cliente
+DIGITOS_CLAVE_TELEFONO = 8
+
+
+def normalizar_telefono(telefono):
+    """
+    Devuelve los últimos N dígitos del teléfono, que es la clave con la que
+    identificamos a un mismo cliente aunque haya pedido con distinto nombre.
+    Ej: '+54 11 6655-4477' y '66554477' devuelven ambos '66554477'.
+    Retorna None si el teléfono no tiene suficientes dígitos para identificarlo.
+    """
+    digitos = ''.join(c for c in (telefono or '') if c.isdigit())
+    if len(digitos) < DIGITOS_CLAVE_TELEFONO:
+        return None
+    return digitos[-DIGITOS_CLAVE_TELEFONO:]
+
+
+@app.route("/admin/clientes-destacados")
+@login_required
+def admin_clientes_destacados():
+    """Clientes que hicieron 2 o más pedidos concretados, agrupados por teléfono"""
+    try:
+        placeholders = ', '.join('?' for _ in ESTADOS_PEDIDO_REALIZADO)
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(f"""
+                SELECT id, fecha, cliente_nombre, cliente_telefono, cliente_email,
+                       metodo_entrega, total, estado
+                FROM pedido
+                WHERE LOWER(TRIM(COALESCE(estado, ''))) IN ({placeholders})
+                ORDER BY fecha ASC, id ASC
+            """, ESTADOS_PEDIDO_REALIZADO)
+            pedidos = [dict(row) for row in cursor.fetchall()]
+
+        clientes = {}
+        pedidos_sin_telefono = 0
+
+        for pedido in pedidos:
+            clave = normalizar_telefono(pedido.get('cliente_telefono'))
+            if not clave:
+                pedidos_sin_telefono += 1
+                continue
+
+            cliente = clientes.setdefault(clave, {
+                'clave': clave,
+                'nombres': [],
+                'telefonos': [],
+                'emails': [],
+                'pedidos': [],
+                'total_gastado': 0
+            })
+
+            nombre = (pedido.get('cliente_nombre') or '').strip()
+            if nombre and nombre not in cliente['nombres']:
+                cliente['nombres'].append(nombre)
+
+            telefono = (pedido.get('cliente_telefono') or '').strip()
+            if telefono and telefono not in cliente['telefonos']:
+                cliente['telefonos'].append(telefono)
+
+            email = (pedido.get('cliente_email') or '').strip()
+            if email and email not in cliente['emails']:
+                cliente['emails'].append(email)
+
+            cliente['pedidos'].append(pedido)
+            cliente['total_gastado'] += pedido.get('total') or 0
+
+        # Solo los que tienen 2 o más pedidos concretados
+        destacados = [c for c in clientes.values() if len(c['pedidos']) >= 2]
+
+        for cliente in destacados:
+            # Los pedidos vienen ordenados por fecha ascendente desde la query
+            cliente['cantidad_pedidos'] = len(cliente['pedidos'])
+            cliente['primer_pedido'] = cliente['pedidos'][0].get('fecha') or ''
+            cliente['ultimo_pedido'] = cliente['pedidos'][-1].get('fecha') or ''
+            cliente['ticket_promedio'] = cliente['total_gastado'] / cliente['cantidad_pedidos']
+            # El nombre más reciente es el que mostramos como principal
+            cliente['nombre_principal'] = (
+                (cliente['pedidos'][-1].get('cliente_nombre') or '').strip()
+                or 'Sin nombre'
+            )
+            cliente['otros_nombres'] = [
+                n for n in cliente['nombres'] if n != cliente['nombre_principal']
+            ]
+            cliente['telefono_principal'] = (
+                cliente['telefonos'][-1] if cliente['telefonos'] else ''
+            )
+
+        destacados.sort(
+            key=lambda c: (c['cantidad_pedidos'], c['total_gastado']),
+            reverse=True
+        )
+
+        return render_template(
+            "admin/clientes_destacados.html",
+            clientes=destacados,
+            pedidos_sin_telefono=pedidos_sin_telefono,
+            digitos_clave=DIGITOS_CLAVE_TELEFONO
+        )
+    except Exception as e:
+        logger.error(f"Error al obtener clientes destacados: {e}")
+        flash('Error al cargar clientes destacados', 'error')
+        return redirect(url_for('admin_dashboard'))
+
+
 # Ruta para servir imágenes desde almacenamiento persistente
 @app.route('/uploads/<path:filename>')
 def uploaded_file(filename):
