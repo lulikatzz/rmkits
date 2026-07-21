@@ -11,14 +11,9 @@
 <div class="clientes-container">
 
   <div class="table-info">
-    <p>
-      Clientes que ya hicieron <strong>2 o más pedidos concretados</strong>
-      (estados: pagado, completado, preparado, señado, impreso, preparando o confirmado).
-    </p>
-    <p class="text-muted">
-      Se considera el mismo cliente cuando coinciden los últimos {{ digitos_clave }} dígitos
-      del teléfono, aunque el pedido haya sido hecho con otro nombre.
-    </p>
+    Clientes con <strong>2 o más pedidos concretados</strong>. Se agrupan por los últimos
+    {{ digitos_clave }} dígitos del teléfono, aunque el pedido tenga otro nombre.
+    <span class="ayuda" title="Estados que cuentan como pedido concretado: pagado, completado, preparado, señado, impreso, preparando y confirmado.">?</span>
   </div>
 
   {% if clientes|length == 0 %}
@@ -49,13 +44,10 @@
       <thead>
         <tr>
           <th>Cliente</th>
-          <th>Teléfono</th>
-          <th>Email</th>
-          <th class="center">Pedidos</th>
-          <th>Total gastado</th>
-          <th>Ticket promedio</th>
-          <th>Primer pedido</th>
-          <th>Último pedido</th>
+          <th>Contacto</th>
+          <th class="center">Ped.</th>
+          <th class="right">Total</th>
+          <th>Período</th>
           <th></th>
         </tr>
       </thead>
@@ -65,34 +57,38 @@
           <td>
             <strong>{{ cliente.nombre_principal }}</strong>
             {% if cliente.otros_nombres %}
-            <div class="otros-nombres" title="Pedidos hechos también con estos nombres">
-              también como: {{ cliente.otros_nombres|join(', ') }}
+            <div class="sub" title="Pedidos hechos también con estos nombres">
+              también: {{ cliente.otros_nombres|join(', ') }}
             </div>
             {% endif %}
           </td>
           <td>
             {{ cliente.telefono_principal }}
             {% if cliente.telefonos|length > 1 %}
-            <div class="otros-nombres">
-              otros: {{ cliente.telefonos[:-1]|join(', ') }}
-            </div>
+            <span class="sub" title="{{ cliente.telefonos|join(', ') }}">(+{{ cliente.telefonos|length - 1 }})</span>
+            {% endif %}
+            {% if cliente.emails %}
+            <div class="sub">{{ cliente.emails|join(', ') }}</div>
             {% endif %}
           </td>
-          <td>{{ cliente.emails|join(', ') or '-' }}</td>
           <td class="center"><span class="badge badge-conteo">{{ cliente.cantidad_pedidos }}</span></td>
-          <td class="price">${{ "{:,.0f}".format(cliente.total_gastado) }}</td>
-          <td>${{ "{:,.0f}".format(cliente.ticket_promedio) }}</td>
-          <td>{{ cliente.primer_pedido[:10] }}</td>
-          <td>{{ cliente.ultimo_pedido[:10] }}</td>
+          <td class="right">
+            <span class="price">${{ "{:,.0f}".format(cliente.total_gastado) }}</span>
+            <div class="sub" title="Ticket promedio">prom. ${{ "{:,.0f}".format(cliente.ticket_promedio) }}</div>
+          </td>
+          <td class="nowrap">
+            {{ cliente.primer_pedido[:10] }}
+            <div class="sub">→ {{ cliente.ultimo_pedido[:10] }}</div>
+          </td>
           <td>
-            <button type="button" class="btn btn-sm btn-primary"
+            <button type="button" class="btn-ver"
                     onclick="toggleDetalle('{{ cliente.clave }}', this)">
               Ver pedidos
             </button>
           </td>
         </tr>
         <tr class="detalle-row" id="detalle-{{ cliente.clave }}" style="display:none">
-          <td colspan="9">
+          <td colspan="6">
             <table class="pedidos-cliente-table">
               <thead>
                 <tr>
@@ -146,23 +142,35 @@ function toggleDetalle(clave, boton) {
 
 <style>
 .clientes-container {
-  padding: 20px;
+  padding: 10px 14px;
 }
 
 .table-info {
   background: #f8f9fa;
-  padding: 15px;
-  border-radius: 8px;
-  margin-bottom: 20px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: #495057;
 }
 
-.table-info p {
-  margin: 5px 0;
+.ayuda {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  line-height: 16px;
+  text-align: center;
+  border-radius: 50%;
+  background: #6a1b9a;
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: help;
 }
 
 .text-muted {
   color: #6c757d;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .alert {
@@ -178,35 +186,37 @@ function toggleDetalle(clave, boton) {
 }
 
 .stats-bar {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 15px;
-  margin-bottom: 20px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
 }
 
 .stat-card {
+  flex: 1 1 140px;
   background: white;
-  padding: 20px;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-  text-align: center;
+  padding: 8px 14px;
+  border-radius: 6px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
 }
 
 .stat-value {
-  font-size: 26px;
+  font-size: 19px;
   font-weight: 700;
   color: #6a1b9a;
 }
 
 .stat-label {
-  font-size: 13px;
+  font-size: 12px;
   color: #6c757d;
-  margin-top: 4px;
 }
 
 .table-responsive {
   overflow-x: auto;
-  margin-bottom: 20px;
+  margin-bottom: 12px;
 }
 
 .clientes-table {
@@ -225,24 +235,32 @@ function toggleDetalle(clave, boton) {
 
 .clientes-table th,
 .clientes-table td {
-  padding: 12px;
+  padding: 6px 10px;
   text-align: left;
-  border-bottom: 1px solid #ddd;
+  border-bottom: 1px solid #eee;
   vertical-align: top;
+  font-size: 13px;
+  line-height: 1.35;
 }
 
-.clientes-table .center {
-  text-align: center;
+.clientes-table th {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .3px;
+  padding: 7px 10px;
 }
+
+.clientes-table .center { text-align: center; }
+.clientes-table .right  { text-align: right; }
+.clientes-table .nowrap { white-space: nowrap; }
 
 .cliente-row:hover {
-  background-color: #f8f9fa;
+  background-color: #faf7fc;
 }
 
-.otros-nombres {
-  font-size: 12px;
+.sub {
+  font-size: 11px;
   color: #6c757d;
-  margin-top: 4px;
 }
 
 .price {
@@ -250,9 +268,25 @@ function toggleDetalle(clave, boton) {
   white-space: nowrap;
 }
 
+.btn-ver {
+  padding: 3px 9px;
+  font-size: 12px;
+  border: 1px solid #6a1b9a;
+  background: white;
+  color: #6a1b9a;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-ver:hover {
+  background: #6a1b9a;
+  color: white;
+}
+
 .detalle-row td {
   background: #f5f2f8;
-  padding: 15px;
+  padding: 8px 10px;
 }
 
 .pedidos-cliente-table {
@@ -265,10 +299,10 @@ function toggleDetalle(clave, boton) {
 
 .pedidos-cliente-table th,
 .pedidos-cliente-table td {
-  padding: 8px 12px;
+  padding: 5px 10px;
   text-align: left;
   border-bottom: 1px solid #eee;
-  font-size: 14px;
+  font-size: 12px;
 }
 
 .pedidos-cliente-table thead {
@@ -278,9 +312,9 @@ function toggleDetalle(clave, boton) {
 
 /* Badges */
 .badge {
-  padding: 5px 11px;
+  padding: 2px 9px;
   border-radius: 20px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   display: inline-block;
   white-space: nowrap;
@@ -301,19 +335,23 @@ function toggleDetalle(clave, boton) {
 
 .download-info {
   background: #fff3cd;
-  padding: 15px;
-  border-radius: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
   border: 1px solid #ffc107;
+}
+
+.download-info p {
+  margin: 0;
 }
 
 @media (max-width: 768px) {
   .clientes-container {
-    padding: 10px;
+    padding: 8px;
   }
   .clientes-table th,
   .clientes-table td {
-    padding: 8px;
-    font-size: 13px;
+    padding: 6px;
+    font-size: 12px;
   }
 }
 </style>
