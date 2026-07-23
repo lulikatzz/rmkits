@@ -4,7 +4,8 @@
 
 // Constantes
 const STORAGE_KEY = "rmkits_carrito";
-const WHATSAPP_NUMERO = "5491158573906";
+//const WHATSAPP_NUMERO = "5491158573906";
+const WHATSAPP_NUMERO = "5491132864633";
 
 // Estado
 let carrito = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
