@@ -129,6 +129,57 @@ def get_db_connection():
             conn.close()
 
 
+# =============================================================================
+# CONFIGURACIÓN DE WHATSAPP (número de pedidos, editable desde el dashboard)
+# =============================================================================
+# Se guarda en un JSON dentro del disco persistente para que sobreviva a los
+# deploys de Render. Es independiente de la base de datos de productos.
+WHATSAPP_CONFIG_PATH = os.path.join(Config.PERSISTENT_DATA_PATH, "whatsapp_config.json")
+
+# Números que se venían usando en el código (valores por defecto / primera vez).
+WHATSAPP_NUMEROS_DEFAULT = ["5491158573906", "5491132864633"]
+WHATSAPP_ACTIVO_DEFAULT = "5491132864633"
+
+
+def solo_digitos(valor):
+    """Devuelve solo los dígitos de un texto (para normalizar números)."""
+    return ''.join(c for c in (valor or '') if c.isdigit())
+
+
+def leer_config_whatsapp():
+    """
+    Lee la configuración de WhatsApp (número activo + lista de números)
+    desde el JSON persistente. Si no existe todavía, devuelve los valores
+    por defecto (los dos números que se venían usando en el código).
+    """
+    try:
+        if os.path.exists(WHATSAPP_CONFIG_PATH):
+            with open(WHATSAPP_CONFIG_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            numeros = [solo_digitos(n) for n in data.get("numeros", []) if solo_digitos(n)]
+            if not numeros:
+                numeros = list(WHATSAPP_NUMEROS_DEFAULT)
+            activo = solo_digitos(data.get("activo", ""))
+            if activo not in numeros:
+                activo = numeros[0]
+            return {"activo": activo, "numeros": numeros}
+    except Exception as e:
+        logger.error(f"Error al leer configuración de WhatsApp: {e}")
+    return {"activo": WHATSAPP_ACTIVO_DEFAULT, "numeros": list(WHATSAPP_NUMEROS_DEFAULT)}
+
+
+def guardar_config_whatsapp(config):
+    """Guarda la configuración de WhatsApp en el JSON persistente."""
+    try:
+        os.makedirs(Config.PERSISTENT_DATA_PATH, exist_ok=True)
+        with open(WHATSAPP_CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+        return True
+    except Exception as e:
+        logger.error(f"Error al guardar configuración de WhatsApp: {e}")
+        return False
+
+
 @app.before_request
 def before_request():
     """Forzar HTTPS en producción"""
@@ -209,7 +260,7 @@ def carrito_view():
             productos_actualizados=productos_actualizados,
             config={
                 'pedido_minimo': Config.PEDIDO_MINIMO,
-                'whatsapp': Config.WHATSAPP_NUMBER,
+                'whatsapp': leer_config_whatsapp()["activo"],
                 'local_direccion': Config.LOCAL_DIRECCION,
                 'local_horarios': Config.LOCAL_HORARIOS,
                 'envio_caba': Config.ENVIO_CABA,
@@ -252,7 +303,7 @@ def enviar_pedido():
 
         mensaje = "\n".join(lines)
         encoded = urllib.parse.quote(mensaje)
-        url = f"https://wa.me/{Config.WHATSAPP_NUMBER}?text={encoded}"
+        url = f"https://wa.me/{leer_config_whatsapp()['activo']}?text={encoded}"
 
         return jsonify({"url": url})
     
@@ -703,17 +754,71 @@ def admin_dashboard():
                     pass
             
             productos_mas_vendidos = list(productos_counter.most_common(10)) if productos_counter else []
-            
+
+            whatsapp_config = leer_config_whatsapp()
+
             return render_template("admin/dashboard.html",
                                  total_productos=total_productos,
                                  productos_con_stock=productos_con_stock,
                                  productos_sin_stock=productos_sin_stock,
                                  stock_total=stock_total,
-                                 total_pedidos=total_pedidos)
+                                 total_pedidos=total_pedidos,
+                                 whatsapp_activo=whatsapp_config["activo"],
+                                 whatsapp_numeros=whatsapp_config["numeros"])
     except Exception as e:
         logger.error(f"Error en dashboard: {e}")
         flash('Error al cargar el dashboard', 'error')
         return redirect(url_for('admin_login'))
+
+
+@app.route("/admin/whatsapp/activo", methods=["POST"])
+@login_required
+def admin_whatsapp_activo():
+    """Cambia el número de WhatsApp activo (al que llegan los pedidos)."""
+    try:
+        data = request.get_json(silent=True) or {}
+        numero = solo_digitos(data.get("numero", ""))
+        if not numero:
+            return jsonify({"success": False, "error": "Número inválido"}), 400
+
+        config = leer_config_whatsapp()
+        if numero not in config["numeros"]:
+            return jsonify({"success": False, "error": "El número no está en la lista"}), 400
+
+        config["activo"] = numero
+        if not guardar_config_whatsapp(config):
+            return jsonify({"success": False, "error": "No se pudo guardar la configuración"}), 500
+
+        logger.info(f"Número de WhatsApp activo cambiado a: {numero}")
+        return jsonify({"success": True, "activo": numero, "numeros": config["numeros"]})
+    except Exception as e:
+        logger.error(f"Error al cambiar número de WhatsApp: {e}")
+        return jsonify({"success": False, "error": "Error interno"}), 500
+
+
+@app.route("/admin/whatsapp/agregar", methods=["POST"])
+@login_required
+def admin_whatsapp_agregar():
+    """Agrega un número nuevo a la lista de números de WhatsApp disponibles."""
+    try:
+        data = request.get_json(silent=True) or {}
+        numero = solo_digitos(data.get("numero", ""))
+        if len(numero) < 8:
+            return jsonify({"success": False, "error": "Número inválido (ingresá solo dígitos con código de país)"}), 400
+
+        config = leer_config_whatsapp()
+        if numero in config["numeros"]:
+            return jsonify({"success": False, "error": "El número ya está en la lista"}), 400
+
+        config["numeros"].append(numero)
+        if not guardar_config_whatsapp(config):
+            return jsonify({"success": False, "error": "No se pudo guardar la configuración"}), 500
+
+        logger.info(f"Número de WhatsApp agregado: {numero}")
+        return jsonify({"success": True, "numeros": config["numeros"], "activo": config["activo"]})
+    except Exception as e:
+        logger.error(f"Error al agregar número de WhatsApp: {e}")
+        return jsonify({"success": False, "error": "Error interno"}), 500
 
 
 @app.route("/admin/api/ventas-por-dia")

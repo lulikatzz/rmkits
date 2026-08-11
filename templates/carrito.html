@@ -80,6 +80,8 @@
   <script>
     // Productos actualizados desde el servidor
     window.productosActualizados = {{ productos_actualizados | tojson }};
+    // Número de WhatsApp al que se envían los pedidos (configurable desde el panel admin)
+    window.WHATSAPP_NUMERO = {{ config.whatsapp | tojson }};
   </script>
 
   <!-- Script principal del carrito -->

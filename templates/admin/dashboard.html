@@ -39,10 +39,57 @@
   .charts-grid {
     grid-template-columns: 1fr;
   }
-  
+
   .chart-container {
     height: 250px;
   }
+}
+
+/* Configuración rápida del número de WhatsApp */
+.whatsapp-config-card {
+  background: white;
+  border-radius: 12px;
+  padding: 20px 24px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  margin-top: 30px;
+  border-left: 5px solid #25D366;
+}
+
+.whatsapp-config-card h3 {
+  margin: 0 0 6px 0;
+  color: #333;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.whatsapp-config-help {
+  margin: 0 0 16px 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.whatsapp-config-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.whatsapp-config-row select,
+.whatsapp-config-row input[type="text"] {
+  padding: 10px 14px;
+  border-radius: 6px;
+  border: 1px solid #ddd;
+  font-size: 15px;
+  min-width: 240px;
+  flex: 1 1 240px;
+}
+
+.whatsapp-config-current {
+  margin: 8px 0 0 0;
+  color: #333;
+  font-size: 14px;
 }
 </style>
 {% endblock %}
@@ -88,6 +135,32 @@
       <div class="stat-label" style="color: rgba(255,255,255,0.9);">Total Pedidos</div>
     </div>
   </div>
+</div>
+
+<!-- Configuración rápida del número de WhatsApp -->
+<div class="whatsapp-config-card">
+  <h3>📱 Número de WhatsApp para pedidos</h3>
+  <p class="whatsapp-config-help">
+    Es el número al que llegan los pedidos desde el carrito. Elegí uno de la lista y tocá "Guardar".
+  </p>
+
+  <div class="whatsapp-config-row">
+    <select id="whatsappSelect">
+      {% for numero in whatsapp_numeros %}
+        <option value="{{ numero }}" {% if numero == whatsapp_activo %}selected{% endif %}>+{{ numero }}</option>
+      {% endfor %}
+    </select>
+    <button type="button" id="guardarWhatsappBtn" class="btn btn-success">💾 Guardar</button>
+  </div>
+
+  <div class="whatsapp-config-row">
+    <input type="text" id="whatsappNuevoInput" placeholder="Nuevo número, ej: 5491122334455" inputmode="numeric">
+    <button type="button" id="agregarWhatsappBtn" class="btn btn-primary">➕ Agregar número</button>
+  </div>
+
+  <p id="whatsappActivoInfo" class="whatsapp-config-current">
+    Número activo actual: <strong>+{{ whatsapp_activo }}</strong>
+  </p>
 </div>
 
 <!-- Gráficos -->
@@ -361,5 +434,97 @@ if (importarTodoBtn && importarTodoInput) {
     }
   });
 }
+
+// =============================================================================
+// Cambio rápido del número de WhatsApp
+// =============================================================================
+const whatsappSelect = document.getElementById('whatsappSelect');
+const guardarWhatsappBtn = document.getElementById('guardarWhatsappBtn');
+const agregarWhatsappBtn = document.getElementById('agregarWhatsappBtn');
+const whatsappNuevoInput = document.getElementById('whatsappNuevoInput');
+const whatsappActivoInfo = document.getElementById('whatsappActivoInfo');
+
+function soloDigitos(valor) {
+  return (valor || '').replace(/\D/g, '');
+}
+
+function reconstruirSelectWhatsapp(numeros, activo) {
+  whatsappSelect.innerHTML = '';
+  numeros.forEach((num) => {
+    const option = document.createElement('option');
+    option.value = num;
+    option.textContent = '+' + num;
+    if (num === activo) option.selected = true;
+    whatsappSelect.appendChild(option);
+  });
+}
+
+async function guardarNumeroActivo() {
+  const numero = whatsappSelect.value;
+  if (!numero) return;
+
+  const textoOriginal = guardarWhatsappBtn.textContent;
+  guardarWhatsappBtn.disabled = true;
+  guardarWhatsappBtn.textContent = '⏳ Guardando...';
+
+  try {
+    const response = await fetch('/admin/whatsapp/activo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ numero })
+    });
+    const result = await response.json();
+    if (!response.ok || !result.success) {
+      alert(result.error || 'No se pudo guardar el número');
+      return;
+    }
+    whatsappActivoInfo.innerHTML = 'Número activo actual: <strong>+' + result.activo + '</strong>';
+    alert('✅ Número de WhatsApp actualizado a +' + result.activo);
+  } catch (error) {
+    console.error('Error al guardar número de WhatsApp:', error);
+    alert('Error de conexión al guardar el número');
+  } finally {
+    guardarWhatsappBtn.disabled = false;
+    guardarWhatsappBtn.textContent = textoOriginal;
+  }
+}
+
+async function agregarNumeroWhatsapp() {
+  const numero = soloDigitos(whatsappNuevoInput.value);
+  if (numero.length < 8) {
+    alert('Ingresá un número válido (solo dígitos, con código de país). Ej: 5491122334455');
+    return;
+  }
+
+  const textoOriginal = agregarWhatsappBtn.textContent;
+  agregarWhatsappBtn.disabled = true;
+  agregarWhatsappBtn.textContent = '⏳ Agregando...';
+
+  try {
+    const response = await fetch('/admin/whatsapp/agregar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ numero })
+    });
+    const result = await response.json();
+    if (!response.ok || !result.success) {
+      alert(result.error || 'No se pudo agregar el número');
+      return;
+    }
+    // Reconstruir el select con la lista actualizada y dejar seleccionado el nuevo
+    reconstruirSelectWhatsapp(result.numeros, numero);
+    whatsappNuevoInput.value = '';
+    alert('✅ Número +' + numero + ' agregado. Acordate de tocar "Guardar" para activarlo.');
+  } catch (error) {
+    console.error('Error al agregar número de WhatsApp:', error);
+    alert('Error de conexión al agregar el número');
+  } finally {
+    agregarWhatsappBtn.disabled = false;
+    agregarWhatsappBtn.textContent = textoOriginal;
+  }
+}
+
+if (guardarWhatsappBtn) guardarWhatsappBtn.addEventListener('click', guardarNumeroActivo);
+if (agregarWhatsappBtn) agregarWhatsappBtn.addEventListener('click', agregarNumeroWhatsapp);
 </script>
 {% endblock %}

@@ -4,8 +4,10 @@
 
 // Constantes
 const STORAGE_KEY = "rmkits_carrito";
-//const WHATSAPP_NUMERO = "5491158573906";
-const WHATSAPP_NUMERO = "5491132864633";
+// El número al que se envían los pedidos se configura desde el panel admin
+// (Dashboard) y se inyecta en la página como window.WHATSAPP_NUMERO.
+// Si por algún motivo no llega, se usa este valor por defecto.
+const WHATSAPP_NUMERO = window.WHATSAPP_NUMERO || "5491132864633";
 
 // Estado
 let carrito = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
