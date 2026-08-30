@@ -953,3 +953,164 @@ header h1 {
     text-align: center;
   }
 }
+
+/* =============================================================================
+   VISOR DE IMÁGENES AMPLIADAS (LIGHTBOX)
+   ============================================================================= */
+
+/* Pistas visuales: las imágenes de producto se pueden ampliar */
+.card .img-wrapper {
+  position: relative;
+  cursor: zoom-in;
+}
+
+.card .img-wrapper::after {
+  content: "⤢";
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background: rgba(106, 27, 154, 0.85);
+  color: white;
+  font-size: 0.65rem;
+  line-height: 16px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.cart-item-imagen {
+  cursor: zoom-in;
+}
+
+.card .img,
+.cart-item-imagen img {
+  cursor: zoom-in;
+}
+
+/* Overlay */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+  padding: 56px 12px 16px;
+  background: rgba(26, 10, 38, 0.97);
+}
+
+.lightbox.abierto {
+  display: flex;
+  animation: lightbox-aparecer 0.18s ease-out;
+}
+
+@keyframes lightbox-aparecer {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+body.lightbox-abierto {
+  overflow: hidden;
+}
+
+/* Área de la imagen: se desplaza cuando está ampliada */
+.lightbox-viewport {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+.lightbox-img {
+  /* margin:auto centra sin recortar los bordes al hacer scroll */
+  margin: auto;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  border-radius: 8px;
+  background: white;
+  cursor: zoom-in;
+  animation: lightbox-escalar 0.18s ease-out;
+}
+
+@keyframes lightbox-escalar {
+  from { transform: scale(0.94); }
+  to { transform: scale(1); }
+}
+
+.lightbox.ampliada .lightbox-img {
+  max-width: none;
+  max-height: none;
+  height: auto;
+  cursor: zoom-out;
+  animation: none;
+}
+
+.lightbox-viewport.arrastrando {
+  cursor: grabbing;
+}
+
+.lightbox-viewport.arrastrando .lightbox-img {
+  cursor: grabbing;
+}
+
+/* Botón cerrar */
+.lightbox-cerrar {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+  font-size: 1.8rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.lightbox-cerrar:hover,
+.lightbox-cerrar:focus {
+  background: rgba(255, 255, 255, 0.3);
+  outline: none;
+}
+
+/* Pie: título del producto y ayuda */
+.lightbox-pie {
+  flex: 0 0 auto;
+  text-align: center;
+  color: white;
+}
+
+.lightbox-leyenda {
+  font-size: 0.95rem;
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.lightbox-leyenda:empty {
+  display: none;
+}
+
+.lightbox-ayuda {
+  font-size: 0.75rem;
+  opacity: 0.7;
+  margin-top: 4px;
+}
+
+.lightbox.ampliada .lightbox-ayuda {
+  visibility: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lightbox.abierto,
+  .lightbox-img {
+    animation: none;
+  }
+}
