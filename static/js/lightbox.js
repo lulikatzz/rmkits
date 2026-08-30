@@ -23,10 +23,20 @@
   const MAX_ESCALA_AJUSTADA = 2;
   const MAX_ESCALA_AMPLIADA = 3;
 
+  /**
+   * En celular/tablet el navegador ya permite acercar con los dedos (pinch),
+   * así que ahí el visor solo agranda la imagen a pantalla completa y tocarla
+   * no hace nada más. El zoom por click queda solo para computadora.
+   */
+  function esTactil() {
+    return window.matchMedia("(hover: none) and (pointer: coarse)").matches;
+  }
+
   let overlay = null;
   let viewport = null;
   let imgGrande = null;
   let leyenda = null;
+  let ayuda = null;
   let btnCerrar = null;
 
   let ampliada = false;      // estado de zoom extra dentro del visor
@@ -53,7 +63,7 @@
       </div>
       <div class="lightbox-pie">
         <div class="lightbox-leyenda"></div>
-        <div class="lightbox-ayuda">Tocá la imagen para acercarla · Tocá afuera para cerrar</div>
+        <div class="lightbox-ayuda"></div>
       </div>
     `;
     document.body.appendChild(overlay);
@@ -61,6 +71,7 @@
     viewport = overlay.querySelector(".lightbox-viewport");
     imgGrande = overlay.querySelector(".lightbox-img");
     leyenda = overlay.querySelector(".lightbox-leyenda");
+    ayuda = overlay.querySelector(".lightbox-ayuda");
     btnCerrar = overlay.querySelector(".lightbox-cerrar");
 
     btnCerrar.addEventListener("click", cerrar);
@@ -72,10 +83,11 @@
       cerrar();
     });
 
-    // Tocar la imagen alterna el zoom extra
+    // Click sobre la imagen: alterna el zoom extra (solo en computadora)
     imgGrande.addEventListener("click", (e) => {
       e.stopPropagation();
       if (huboArrastre) return; // fue un arrastre, no un click
+      if (esTactil()) return;   // en celular se usa el pinch del navegador
       alternarZoom(e.clientX, e.clientY);
     });
 
@@ -134,6 +146,10 @@
     imgGrande.alt = titulo || "Imagen del producto";
     leyenda.textContent = titulo || "";
     leyenda.style.display = titulo ? "" : "none";
+
+    ayuda.textContent = esTactil()
+      ? "Tocá afuera de la imagen para cerrar"
+      : "Hacé click en la imagen para acercarla · Click afuera para cerrar";
 
     overlay.classList.add("abierto");
     document.body.classList.add("lightbox-abierto");
