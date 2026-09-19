@@ -234,8 +234,8 @@ header h1 {
   flex-direction: column;
   gap: 4px;
   min-width: 0;
-  /* Ocupa todo el alto de la tarjeta para que .acciones (margin-top: auto)
-     quede abajo, alineada con las de las otras tarjetas de la fila */
+  /* Ocupa todo el alto de la tarjeta para que .detalle (margin-top: auto) y
+     los botones queden abajo, alineados con los de las otras tarjetas de la fila */
   align-self: stretch;
 }
 
@@ -256,7 +256,10 @@ header h1 {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
-  margin-top: 2px;
+  /* El espacio que sobra queda arriba (entre el precio y el mínimo): así
+     mínimo, múltiplo y botones van juntos al fondo de la tarjeta */
+  margin-top: auto;
+  padding-top: 2px;
 }
 
 .detalle,
@@ -302,7 +305,6 @@ header h1 {
    ============================================================================= */
 
 .acciones {
-  margin-top: auto;
   display: flex;
   gap: 6px;
   align-items: center;
