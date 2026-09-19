@@ -295,45 +295,7 @@ function renderProductos() {
     cont.appendChild(node);
   });
 
-  alinearTarjetas();
   actualizarPaginacion();
-}
-
-/**
- * En cada fila de la grilla, estira los títulos de las tarjetas más bajas
- * hasta que los detalles de todas terminen a la misma altura: así los botones
- * quedan alineados y pegados a los detalles, y el espacio que sobra queda
- * debajo del título en vez de arriba de los botones. Los títulos se muestran
- * siempre completos.
- */
-function alinearTarjetas() {
-  const tarjetas = Array.from(cont.querySelectorAll(".card"));
-  tarjetas.forEach(card => { card.querySelector(".titulo").style.minHeight = ""; });
-
-  // Tarjetas de la misma fila = misma distancia al borde superior
-  const filas = new Map();
-  tarjetas.forEach(card => {
-    if (!filas.has(card.offsetTop)) filas.set(card.offsetTop, []);
-    filas.get(card.offsetTop).push(card);
-  });
-
-  filas.forEach(fila => {
-    if (fila.length < 2) return;
-    // También compensa el espacio de arriba de las tarjetas con etiqueta
-    const medidas = fila.map(card => {
-      const titulo = card.querySelector(".titulo");
-      return {
-        titulo,
-        altoTitulo: titulo.getBoundingClientRect().height,
-        finDetalle: card.querySelector(".detalle").getBoundingClientRect().bottom
-      };
-    });
-    const finMax = Math.max(...medidas.map(m => m.finDetalle));
-    medidas.forEach(({ titulo, altoTitulo, finDetalle }) => {
-      const falta = finMax - finDetalle;
-      if (falta > 0.5) titulo.style.minHeight = `${altoTitulo + falta}px`;
-    });
-  });
 }
 
 /**
@@ -426,21 +388,6 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   document.getElementById("finalizar-pedido-btn").addEventListener("click", irCarrito);
-
-  // Al cambiar el ancho (girar el celular, achicar la ventana) se arman otras
-  // filas y hay que volver a alinear. En celular también cambia el alto al
-  // mostrar/ocultar la barra del navegador: eso no afecta las filas.
-  let anchoAnterior = window.innerWidth;
-  let alineacionPendiente = false;
-  window.addEventListener("resize", () => {
-    if (window.innerWidth === anchoAnterior || alineacionPendiente) return;
-    anchoAnterior = window.innerWidth;
-    alineacionPendiente = true;
-    requestAnimationFrame(() => {
-      alineacionPendiente = false;
-      alinearTarjetas();
-    });
-  });
 
   // Prevenir zoom con doble tap en móviles
   let lastTouchEnd = 0;
