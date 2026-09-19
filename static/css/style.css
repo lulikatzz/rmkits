@@ -234,6 +234,9 @@ header h1 {
   flex-direction: column;
   gap: 4px;
   min-width: 0;
+  /* Ocupa todo el alto de la tarjeta para que .acciones (margin-top: auto)
+     quede abajo, alineada con las de las otras tarjetas de la fila */
+  align-self: stretch;
 }
 
 .titulo {
