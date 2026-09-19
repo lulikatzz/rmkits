@@ -1,0 +1,256 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Mochilas{% endblock %}
+{% block page_title %}🎒 Catálogo de Mochilas{% endblock %}
+
+{% block header_actions %}
+<a href="{{ url_for('admin_mochilas_catalogo') }}" class="btn btn-secondary">👁️ Ver catálogo</a>
+<a href="{{ url_for('admin_mochilas_pdf') }}" class="btn btn-success">⬇️ Descargar PDF</a>
+<a href="{{ url_for('admin_mochila_nueva') }}" class="btn btn-primary">➕ Agregar mochila</a>
+{% endblock %}
+
+{% block content %}
+<div class="mochilas-container">
+
+  <div class="resumen-mochilas">
+    <strong>{{ mochilas|length }}</strong> mochilas en total ·
+    <strong id="contadorActivas">{{ activas }}</strong> activadas.
+    Las activadas son las que aparecen en el catálogo y en el PDF.
+  </div>
+
+  {% if mochilas %}
+  <div class="table-responsive">
+    <table class="mochilas-table">
+      <thead>
+        <tr>
+          <th>Foto</th>
+          <th>Modelo</th>
+          <th class="right">Precio</th>
+          <th class="right">Cantidad</th>
+          <th>Descripción</th>
+          <th>Estado</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in mochilas %}
+        <tr class="{{ '' if m.activada else 'apagada' }}">
+          <td>
+            {% if m.imagen %}
+            <img class="mini" src="{{ url_for('uploaded_file', filename='mochilas/' ~ m.imagen) }}" alt="" loading="lazy">
+            {% else %}
+            <div class="mini sin-foto">—</div>
+            {% endif %}
+          </td>
+          <td class="modelo">{{ m.modelo }}</td>
+          <td class="right nowrap">{{ m.precio|precio_ar }}</td>
+          <td class="right">{{ m.cantidad if m.cantidad is not none else '—' }}</td>
+          <td class="desc">
+            {{ m.descripcion }}
+            {% if m.medidas %}<div class="sub">{{ m.medidas }}</div>{% endif %}
+          </td>
+          <td>
+            <label class="check-estado">
+              <input type="checkbox" {{ 'checked' if m.activada }}
+                     data-url="{{ url_for('admin_mochila_activada', id=m.id) }}">
+              <span>{{ 'Activada' if m.activada else 'Desactivada' }}</span>
+            </label>
+          </td>
+          <td class="acciones">
+            <a class="btn-ver" href="{{ url_for('admin_mochila_editar', id=m.id) }}">Editar</a>
+            <form method="POST" action="{{ url_for('admin_mochila_eliminar', id=m.id) }}" class="inline"
+                  data-confirmar="¿Eliminar {{ m.modelo }}? Esto no se puede deshacer."
+                  onsubmit="return confirm(this.dataset.confirmar)">
+              <button type="submit" class="btn-quitar">Eliminar</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="vacio">Todavía no hay mochilas. <a href="{{ url_for('admin_mochila_nueva') }}">Agregá la primera</a>.</p>
+  {% endif %}
+</div>
+
+<script>
+// Activar/desactivar sin recargar la página
+document.querySelectorAll('.check-estado input').forEach(check => {
+  check.addEventListener('change', async () => {
+    check.disabled = true;
+    try {
+      const respuesta = await fetch(check.dataset.url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ activada: check.checked })
+      });
+      const data = await respuesta.json();
+      if (!respuesta.ok || !data.success) throw new Error(data.error || respuesta.status);
+
+      check.closest('tr').classList.toggle('apagada', !check.checked);
+      check.nextElementSibling.textContent = check.checked ? 'Activada' : 'Desactivada';
+      const contador = document.getElementById('contadorActivas');
+      contador.textContent = Number(contador.textContent) + (check.checked ? 1 : -1);
+    } catch (e) {
+      check.checked = !check.checked;
+      alert('No se pudo cambiar el estado. Probá de nuevo.');
+    } finally {
+      check.disabled = false;
+    }
+  });
+});
+</script>
+
+<style>
+.resumen-mochilas {
+  background: #f8f9fa;
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  color: #495057;
+}
+
+.vacio {
+  padding: 20px;
+  text-align: center;
+  color: #6c757d;
+}
+
+.table-responsive {
+  overflow-x: auto;
+}
+
+.mochilas-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.mochilas-table thead {
+  background: #6a1b9a;
+  color: white;
+}
+
+.mochilas-table th,
+.mochilas-table td {
+  padding: 6px 10px;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+  vertical-align: middle;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.mochilas-table th {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .3px;
+  padding: 7px 10px;
+}
+
+.mochilas-table .right { text-align: right; }
+.mochilas-table .nowrap { white-space: nowrap; }
+
+.mochilas-table tbody tr:hover {
+  background-color: #faf7fc;
+}
+
+/* Desactivadas: se ven apagadas, salvo el estado y los botones */
+.mochilas-table tr.apagada td { opacity: .45; }
+.mochilas-table tr.apagada td:nth-last-child(-n+2) { opacity: 1; }
+
+.mochilas-table td.modelo {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.mochilas-table td.desc { color: #555; }
+
+.sub {
+  font-size: 11px;
+  color: #6c757d;
+}
+
+img.mini,
+.mini.sin-foto {
+  /* Apaisada: las fotos de las mochilas son más anchas que altas */
+  width: 84px;
+  height: 56px;
+  object-fit: contain;
+  border-radius: 6px;
+  background: #f5f2f8;
+  display: block;
+}
+
+.mini.sin-foto {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #aaa;
+}
+
+.check-estado {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 12px;
+  color: #444;
+  white-space: nowrap;
+}
+
+.check-estado input {
+  width: 20px;
+  height: 20px;
+  accent-color: #6a1b9a;
+  cursor: pointer;
+}
+
+.mochilas-table td.acciones {
+  white-space: nowrap;
+  text-align: right;
+}
+
+form.inline {
+  display: inline;
+}
+
+.btn-ver,
+.btn-quitar {
+  display: inline-block;
+  padding: 3px 9px;
+  font-size: 12px;
+  background: white;
+  border-radius: 4px;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.btn-ver {
+  border: 1px solid #6a1b9a;
+  color: #6a1b9a;
+}
+
+.btn-ver:hover {
+  background: #6a1b9a;
+  color: white;
+}
+
+.btn-quitar {
+  border: 1px solid #e57373;
+  color: #c62828;
+}
+
+.btn-quitar:hover {
+  background: #c62828;
+  color: white;
+}
+</style>
+{% endblock %}

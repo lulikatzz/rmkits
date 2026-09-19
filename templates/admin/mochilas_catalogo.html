@@ -1,0 +1,113 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Catálogo de Mochilas{% endblock %}
+{% block page_title %}🎒 Catálogo de Mochilas{% endblock %}
+
+{% block header_actions %}
+<a href="{{ url_for('admin_mochilas') }}" class="btn btn-secondary">← Administrar</a>
+<a href="{{ url_for('admin_mochilas_pdf') }}" class="btn btn-success">⬇️ Descargar PDF</a>
+{% endblock %}
+
+{% block content %}
+<p class="subtitulo">{{ mochilas|length }} mochilas disponibles (las activadas, como salen en el PDF)</p>
+
+<div class="grilla">
+  {% for m in mochilas %}
+  <div class="tarjeta">
+    {% if m.imagen %}
+    <img src="{{ url_for('uploaded_file', filename='mochilas/' ~ m.imagen) }}" alt="{{ m.modelo }}" loading="lazy">
+    {% else %}
+    <div class="sin-foto">Sin foto</div>
+    {% endif %}
+    <div class="tarjeta-info">
+      <div class="fila">
+        <h2>{{ m.modelo }}</h2>
+        <span class="precio">{{ m.precio|precio_ar }}</span>
+      </div>
+      <p class="descripcion">{{ m.descripcion }}</p>
+      <div class="fila detalle">
+        <span>{{ m.medidas }}</span>
+        {% if m.cantidad is not none %}<span>{{ m.cantidad }} unidades</span>{% endif %}
+      </div>
+    </div>
+  </div>
+  {% else %}
+  <p>No hay mochilas activadas. Activalas desde <a href="{{ url_for('admin_mochilas') }}">Administrar</a>.</p>
+  {% endfor %}
+</div>
+
+<style>
+.subtitulo {
+  color: #667;
+  margin-bottom: 16px;
+}
+
+.grilla {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 20px;
+}
+
+.tarjeta {
+  background: #fff;
+  border: 1px solid #ece6f3;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .08);
+  display: flex;
+  flex-direction: column;
+}
+
+.tarjeta img {
+  width: 100%;
+  height: 240px;
+  object-fit: contain;
+  background: #fff;
+  padding: 10px;
+}
+
+.sin-foto {
+  height: 240px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #aab;
+  background: #eef0f3;
+}
+
+.tarjeta-info {
+  padding: 14px 16px 16px;
+}
+
+.fila {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tarjeta h2 {
+  font-size: 1.05rem;
+  color: #333;
+}
+
+.precio {
+  color: #15803d;
+  font-weight: 700;
+  font-size: 1.1rem;
+  white-space: nowrap;
+}
+
+.descripcion {
+  color: #556;
+  margin: 6px 0;
+  font-size: .92rem;
+}
+
+.detalle {
+  color: #889;
+  font-size: .85rem;
+}
+</style>
+{% endblock %}

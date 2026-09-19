@@ -1,0 +1,125 @@
+{% extends "admin/base.html" %}
+
+{% set editando = mochila and mochila.id %}
+
+{% block title %}{{ 'Editar' if editando else 'Agregar' }} mochila{% endblock %}
+{% block page_title %}{{ '✏️ Editar ' ~ mochila.modelo if editando else '➕ Agregar mochila' }}{% endblock %}
+
+{% block header_actions %}
+<a href="{{ url_for('admin_mochilas') }}" class="btn btn-secondary">← Volver</a>
+{% endblock %}
+
+{% block content %}
+<div class="form-container">
+  <form method="POST" enctype="multipart/form-data" class="product-form">
+    <div class="form-grid">
+      <!-- Columna Izquierda -->
+      <div class="form-section">
+        <h3>Datos de la mochila</h3>
+
+        <div class="form-group">
+          <label for="modelo">Modelo *</label>
+          <input type="text" id="modelo" name="modelo" required
+                 value="{{ mochila.modelo if mochila else '' }}" placeholder="Ej: KEYWAY FILGO">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="precio">Precio ($)</label>
+            <input type="number" id="precio" name="precio" min="0"
+                   value="{{ mochila.precio if mochila else '' }}" placeholder="0">
+          </div>
+
+          <div class="form-group">
+            <label for="cantidad">Cantidad (unidades)</label>
+            <input type="number" id="cantidad" name="cantidad" min="0"
+                   value="{{ mochila.cantidad if mochila and mochila.cantidad is not none else '' }}">
+            <small>Opcional</small>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="descripcion">Descripción</label>
+          <input type="text" id="descripcion" name="descripcion"
+                 value="{{ mochila.descripcion if mochila else '' }}" placeholder="MOCHILA ESCOLAR REFORZADA">
+        </div>
+
+        <div class="form-group">
+          <label for="medidas">Medidas</label>
+          <input type="text" id="medidas" name="medidas"
+                 value="{{ mochila.medidas if mochila else '' }}" placeholder="MEDIDAS: 40x28x14CM">
+        </div>
+      </div>
+
+      <!-- Columna Derecha -->
+      <div class="form-section">
+        <h3>Foto y estado</h3>
+
+        {% if mochila and mochila.imagen %}
+        <div class="current-image">
+          <img src="{{ url_for('uploaded_file', filename='mochilas/' ~ mochila.imagen) }}" alt="{{ mochila.modelo }}">
+          <p class="text-muted">Foto actual: si subís otra, la reemplaza.</p>
+        </div>
+        {% endif %}
+
+        <div class="form-group">
+          <label for="imagen">{{ 'Cambiar foto' if mochila and mochila.imagen else 'Subir foto' }}</label>
+          <input type="file" id="imagen" name="imagen" accept="image/*" onchange="previewImage(this)">
+          <small>Formatos: JPG, PNG, GIF, WEBP (máx 5MB)</small>
+        </div>
+
+        <div id="imagePreview" class="image-preview"></div>
+
+        <label class="check-activada">
+          <input type="checkbox" name="activada" {{ 'checked' if not mochila or mochila.activada }}>
+          Activada (aparece en el catálogo y en el PDF)
+        </label>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary btn-lg">
+        {{ '✅ Guardar cambios' if editando else '➕ Agregar mochila' }}
+      </button>
+      <a href="{{ url_for('admin_mochilas') }}" class="btn btn-secondary btn-lg">Cancelar</a>
+    </div>
+  </form>
+</div>
+
+<style>
+.check-activada {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.check-activada input {
+  width: 20px;
+  height: 20px;
+  accent-color: #6a1b9a;
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function previewImage(input) {
+  const preview = document.getElementById('imagePreview');
+  preview.innerHTML = '';
+
+  if (input.files && input.files[0]) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const img = document.createElement('img');
+      img.src = e.target.result;
+      preview.appendChild(img);
+      preview.style.display = 'block';
+    };
+    reader.readAsDataURL(input.files[0]);
+  }
+}
+</script>
+{% endblock %}

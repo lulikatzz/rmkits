@@ -10,6 +10,7 @@ import logging
 import os
 import re
 import json
+import time
 from contextlib import contextmanager
 from functools import wraps
 from datetime import datetime, date, timedelta, timezone
@@ -18,6 +19,8 @@ from config import Config
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill
 from openpyxl import load_workbook
+from fpdf import FPDF
+from PIL import Image
 from io import BytesIO
 import zipfile
 import shutil
@@ -434,6 +437,13 @@ def page_not_found(e):
     return render_template("error.html", mensaje="Página no encontrada"), 404
 
 
+@app.errorhandler(413)
+def archivo_muy_grande(e):
+    """Archivo subido más grande que MAX_CONTENT_LENGTH"""
+    flash(f'El archivo es muy grande: el máximo es {Config.MAX_CONTENT_LENGTH // (1024 * 1024)} MB.', 'error')
+    return redirect(request.referrer or url_for('admin_dashboard'))
+
+
 @app.errorhandler(500)
 def internal_error(e):
     """Error interno del servidor"""
@@ -497,6 +507,48 @@ def generar_codigo_producto():
     except Exception as e:
         logger.error(f"Error al generar código: {e}")
         return "A0001"
+
+
+# Catálogo de mochilas (ver sección CATÁLOGO DE MOCHILAS). Las fotos van en una
+# subcarpeta del almacenamiento persistente y se sirven en /uploads/mochilas/...
+MOCHILAS_SUBCARPETA = "mochilas"
+MOCHILAS_DATOS_INICIALES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "datos_iniciales", "mochilas")
+
+
+def carpeta_fotos_mochilas():
+    return os.path.join(Config.UPLOAD_FOLDER, MOCHILAS_SUBCARPETA)
+
+
+def importar_mochilas_iniciales(cursor):
+    """
+    Carga las mochilas que había en la app de Windows "Catálogo de Mochilas"
+    (datos_iniciales/mochilas). Se llama una sola vez, cuando se crea la tabla.
+    """
+    ruta_json = os.path.join(MOCHILAS_DATOS_INICIALES, "mochilas.json")
+    if not os.path.isfile(ruta_json):
+        return
+
+    with open(ruta_json, encoding="utf-8") as f:
+        mochilas = json.load(f)
+
+    for mochila in mochilas:
+        cursor.execute("""
+            INSERT INTO mochila (id, modelo, precio, cantidad, descripcion, medidas, imagen, activada, orden)
+            VALUES (:id, :modelo, :precio, :cantidad, :descripcion, :medidas, :imagen, :activada, :orden)
+        """, mochila)
+
+    # Si falla la copia de alguna foto, la mochila queda cargada igual (sin foto)
+    try:
+        os.makedirs(carpeta_fotos_mochilas(), exist_ok=True)
+        for mochila in mochilas:
+            origen = os.path.join(MOCHILAS_DATOS_INICIALES, "imagenes", mochila["imagen"] or "")
+            destino = os.path.join(carpeta_fotos_mochilas(), mochila["imagen"] or "")
+            if mochila["imagen"] and os.path.isfile(origen) and not os.path.exists(destino):
+                shutil.copy2(origen, destino)
+    except Exception as e:
+        logger.error(f"Error al copiar las fotos iniciales de mochilas: {e}")
+
+    logger.info(f"✓ Catálogo de mochilas: se cargaron {len(mochilas)} mochilas iniciales")
 
 
 def init_database():
@@ -623,6 +675,25 @@ def init_database():
                     FOREIGN KEY (categoria_id) REFERENCES categoria(id)
                 )
             """)
+
+            # Catálogo de mochilas (ex app de Windows): la primera vez se cargan las que había
+            cursor.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='mochila'")
+            mochila_es_nueva = cursor.fetchone() is None
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS mochila (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    modelo TEXT NOT NULL,
+                    precio INTEGER NOT NULL DEFAULT 0,
+                    cantidad INTEGER,
+                    descripcion TEXT DEFAULT '',
+                    medidas TEXT DEFAULT '',
+                    imagen TEXT,
+                    activada INTEGER NOT NULL DEFAULT 1,
+                    orden INTEGER NOT NULL DEFAULT 0
+                )
+            """)
+            if mochila_es_nueva:
+                importar_mochilas_iniciales(cursor)
 
             conn.commit()
             logger.info("✓ Tablas de base de datos inicializadas correctamente")
@@ -2902,6 +2973,328 @@ def admin_etiqueta_quitar_asignacion(id):
         flash(f'Error al quitar etiqueta: {str(e)}', 'error')
 
     return redirect(url_for('admin_etiquetas'))
+
+
+# =============================================================================
+# CATÁLOGO DE MOCHILAS (lo que antes era la app de Windows "Catálogo de Mochilas")
+# =============================================================================
+# Catálogo aparte de los productos de la tienda: se administra desde el admin y
+# se comparte como PDF. Solo las mochilas activadas aparecen en el catálogo y
+# en el PDF. Tabla `mochila`; fotos en carpeta_fotos_mochilas().
+
+EXTENSIONES_FOTO_MOCHILA = {'.' + ext for ext in Config.ALLOWED_EXTENSIONS}
+
+# Medidas del PDF en mm: A4 con 2 mochilas por página (igual que la app de Windows)
+PDF_MARGEN_X = 6
+PDF_MARGEN_Y = 8
+PDF_ALTO_TARJETA = 138
+PDF_ALTO_IMG = 121
+PDF_VERDE = (146, 208, 80)
+
+
+@app.template_filter('precio_ar')
+def formato_precio_ar(valor):
+    """12990 -> '$ 12.990'"""
+    try:
+        return '$ ' + f'{int(valor):,}'.replace(',', '.')
+    except (TypeError, ValueError):
+        return '$ 0'
+
+
+def leer_formulario_mochila(form):
+    """Datos de una mochila desde el formulario de alta/edición."""
+    try:
+        precio = int(form.get('precio', '0').replace('.', '').replace('$', '').strip() or 0)
+    except ValueError:
+        precio = 0
+    cantidad = form.get('cantidad', '').strip()
+    return {
+        'modelo': form.get('modelo', '').strip(),
+        'precio': precio,
+        'cantidad': int(cantidad) if cantidad.isdigit() else None,
+        'descripcion': form.get('descripcion', '').strip(),
+        'medidas': form.get('medidas', '').strip(),
+        'activada': 1 if form.get('activada') else 0
+    }
+
+
+def guardar_foto_mochila(archivo, modelo):
+    """Guarda la foto subida y devuelve el nombre del archivo, o None si no hay una válida."""
+    if not archivo or not archivo.filename:
+        return None
+    ext = os.path.splitext(archivo.filename)[1].lower()
+    if ext not in EXTENSIONES_FOTO_MOCHILA:
+        flash(f'Formato de imagen no soportado: {ext}', 'error')
+        return None
+    base = re.sub(r'[^a-z0-9]+', '-', modelo.lower()).strip('-') or 'mochila'
+    nombre = f"{base}-{int(time.time())}{ext}"
+    os.makedirs(carpeta_fotos_mochilas(), exist_ok=True)
+    archivo.save(os.path.join(carpeta_fotos_mochilas(), nombre))
+    return nombre
+
+
+def borrar_foto_mochila(nombre):
+    if not nombre:
+        return
+    ruta = os.path.join(carpeta_fotos_mochilas(), nombre)
+    try:
+        if os.path.isfile(ruta):
+            os.remove(ruta)
+    except OSError as e:
+        logger.warning(f"No se pudo borrar la foto de mochila {nombre}: {e}")
+
+
+def texto_pdf(texto):
+    """Las fuentes estándar del PDF solo tienen caracteres latinos: el resto se cambia por '?'."""
+    return (texto or '').encode('latin-1', 'replace').decode('latin-1')
+
+
+def dibujar_mochila_pdf(pdf, mochila, y):
+    """Una mochila en el PDF: la foto grande y abajo una franja verde con modelo, detalle y precio."""
+    ancho = pdf.w - 2 * PDF_MARGEN_X
+
+    ruta = os.path.join(carpeta_fotos_mochilas(), mochila['imagen']) if mochila['imagen'] else None
+    if ruta and os.path.isfile(ruta):
+        try:
+            with Image.open(ruta) as img:
+                w_px, h_px = img.size
+            escala = min((ancho - 12) / w_px, PDF_ALTO_IMG / h_px)
+            w_mm, h_mm = w_px * escala, h_px * escala
+            pdf.image(ruta, x=PDF_MARGEN_X + (ancho - w_mm) / 2,
+                      y=y + 4 + (PDF_ALTO_IMG - h_mm) / 2, w=w_mm, h=h_mm)
+        except Exception as e:
+            logger.warning(f"No se pudo poner la foto {mochila['imagen']} en el PDF: {e}")
+
+    y_banda = y + PDF_ALTO_IMG + 5
+    alto_banda = 12
+    pdf.set_fill_color(*PDF_VERDE)
+    pdf.rect(PDF_MARGEN_X, y_banda, ancho, alto_banda, style='F', round_corners=True, corner_radius=3)
+
+    precio = formato_precio_ar(mochila['precio'])
+    pdf.set_font('helvetica', 'B', 14)
+    pdf.set_text_color(20, 20, 20)
+    w_precio = pdf.get_string_width(precio)
+    pdf.set_xy(pdf.w - PDF_MARGEN_X - 8 - w_precio, y_banda)
+    pdf.cell(w_precio, alto_banda, precio, align='R')
+
+    modelo = texto_pdf(mochila['modelo'])
+    pdf.set_xy(PDF_MARGEN_X + 8, y_banda)
+    w_modelo = pdf.get_string_width(modelo)
+    pdf.cell(w_modelo + 2, alto_banda, modelo)
+
+    detalle = texto_pdf(' · '.join(t for t in (mochila['descripcion'], mochila['medidas']) if t))
+    if detalle:
+        pdf.set_font('helvetica', '', 10)
+        pdf.set_text_color(50, 50, 50)
+        x_detalle = PDF_MARGEN_X + 8 + w_modelo + 6
+        disponible = pdf.w - PDF_MARGEN_X - 8 - w_precio - 6 - x_detalle
+        # Si no entra entre el modelo y el precio, se acorta en vez de pisarlos
+        while detalle and pdf.get_string_width(detalle) > disponible:
+            detalle = detalle[:-4].rstrip() + '...' if len(detalle) > 4 else ''
+        if detalle:
+            pdf.set_xy(x_detalle, y_banda)
+            pdf.cell(disponible, alto_banda, detalle, align='R')
+
+
+def generar_pdf_mochilas(mochilas):
+    """Catálogo en PDF (A4, 2 mochilas por página). Devuelve los bytes del archivo."""
+    pdf = FPDF(format='A4')
+    pdf.set_auto_page_break(False)
+    pdf.set_title('Catálogo de mochilas')
+
+    for i, mochila in enumerate(mochilas):
+        posicion = i % 2
+        if posicion == 0:
+            pdf.add_page()
+        dibujar_mochila_pdf(pdf, mochila, PDF_MARGEN_Y + posicion * (PDF_ALTO_TARJETA + 5))
+
+    if not mochilas:
+        pdf.add_page()
+        pdf.set_font('helvetica', '', 14)
+        pdf.cell(0, 10, 'No hay mochilas activadas en el catálogo.')
+
+    return bytes(pdf.output())
+
+
+def obtener_mochilas(solo_activadas=False):
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        filtro = "WHERE activada = 1" if solo_activadas else ""
+        cursor.execute(f"SELECT * FROM mochila {filtro} ORDER BY orden, id")
+        return [dict(row) for row in cursor.fetchall()]
+
+
+@app.route("/admin/mochilas")
+@login_required
+def admin_mochilas():
+    """Catálogo de mochilas: lista para agregar, editar, activar/desactivar y eliminar"""
+    try:
+        mochilas = obtener_mochilas()
+        activas = sum(1 for m in mochilas if m['activada'])
+        return render_template("admin/mochilas.html", mochilas=mochilas, activas=activas)
+    except Exception as e:
+        logger.error(f"Error al cargar mochilas: {e}")
+        flash('Error al cargar el catálogo de mochilas', 'error')
+        return redirect(url_for('admin_dashboard'))
+
+
+@app.route("/admin/mochilas/catalogo")
+@login_required
+def admin_mochilas_catalogo():
+    """Vista del catálogo: las mochilas activadas, como salen en el PDF"""
+    try:
+        return render_template("admin/mochilas_catalogo.html", mochilas=obtener_mochilas(solo_activadas=True))
+    except Exception as e:
+        logger.error(f"Error al cargar el catálogo de mochilas: {e}")
+        flash('Error al cargar el catálogo de mochilas', 'error')
+        return redirect(url_for('admin_mochilas'))
+
+
+@app.route("/admin/mochilas/pdf")
+@login_required
+def admin_mochilas_pdf():
+    """Descargar el catálogo en PDF (solo las mochilas activadas)"""
+    try:
+        contenido = generar_pdf_mochilas(obtener_mochilas(solo_activadas=True))
+        return send_file(
+            BytesIO(contenido),
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name='catalogo-mochilas.pdf'
+        )
+    except Exception as e:
+        logger.error(f"Error al generar el PDF de mochilas: {e}")
+        flash('Error al generar el PDF', 'error')
+        return redirect(url_for('admin_mochilas'))
+
+
+@app.route("/admin/mochilas/nueva", methods=["GET", "POST"])
+@login_required
+def admin_mochila_nueva():
+    """Agregar una mochila (queda última en el catálogo)"""
+    if request.method == "POST":
+        datos = leer_formulario_mochila(request.form)
+        if not datos['modelo']:
+            flash('El modelo no puede estar vacío.', 'error')
+            return render_template("admin/mochila_form.html", mochila=datos)
+
+        datos['imagen'] = guardar_foto_mochila(request.files.get('imagen'), datos['modelo'])
+        try:
+            with get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT COALESCE(MAX(orden), 0) + 1 FROM mochila")
+                datos['orden'] = cursor.fetchone()[0]
+                cursor.execute("""
+                    INSERT INTO mochila (modelo, precio, cantidad, descripcion, medidas, imagen, activada, orden)
+                    VALUES (:modelo, :precio, :cantidad, :descripcion, :medidas, :imagen, :activada, :orden)
+                """, datos)
+                conn.commit()
+            flash(f'Se agregó {datos["modelo"]}.', 'success')
+            return redirect(url_for('admin_mochilas'))
+        except Exception as e:
+            logger.error(f"Error al agregar mochila: {e}")
+            borrar_foto_mochila(datos['imagen'])
+            flash(f'Error al agregar la mochila: {str(e)}', 'error')
+            return render_template("admin/mochila_form.html", mochila=datos)
+
+    return render_template("admin/mochila_form.html", mochila=None)
+
+
+@app.route("/admin/mochilas/<int:id>/editar", methods=["GET", "POST"])
+@login_required
+def admin_mochila_editar(id):
+    """Editar una mochila (si se sube otra foto, reemplaza a la anterior)"""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM mochila WHERE id = ?", (id,))
+            fila = cursor.fetchone()
+        mochila = dict(fila) if fila else None
+    except Exception as e:
+        logger.error(f"Error al buscar mochila: {e}")
+        mochila = None
+
+    if not mochila:
+        flash('Esa mochila no existe.', 'error')
+        return redirect(url_for('admin_mochilas'))
+
+    if request.method == "POST":
+        datos = leer_formulario_mochila(request.form)
+        datos['id'] = id
+        datos['imagen'] = mochila['imagen']
+        if not datos['modelo']:
+            flash('El modelo no puede estar vacío.', 'error')
+            return render_template("admin/mochila_form.html", mochila=datos)
+
+        nueva_foto = guardar_foto_mochila(request.files.get('imagen'), datos['modelo'])
+        if nueva_foto:
+            datos['imagen'] = nueva_foto
+        try:
+            with get_db_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("""
+                    UPDATE mochila
+                    SET modelo = :modelo, precio = :precio, cantidad = :cantidad, descripcion = :descripcion,
+                        medidas = :medidas, imagen = :imagen, activada = :activada
+                    WHERE id = :id
+                """, datos)
+                conn.commit()
+        except Exception as e:
+            logger.error(f"Error al editar mochila: {e}")
+            borrar_foto_mochila(nueva_foto)
+            flash(f'Error al guardar la mochila: {str(e)}', 'error')
+            return render_template("admin/mochila_form.html", mochila={**datos, 'imagen': mochila['imagen']})
+
+        # La foto anterior se borra recién cuando la nueva ya quedó guardada
+        if nueva_foto:
+            borrar_foto_mochila(mochila['imagen'])
+        flash(f'Se guardó {datos["modelo"]}.', 'success')
+        return redirect(url_for('admin_mochilas'))
+
+    return render_template("admin/mochila_form.html", mochila=mochila)
+
+
+@app.route("/admin/mochilas/<int:id>/activada", methods=["POST"])
+@login_required
+def admin_mochila_activada(id):
+    """Activar/desactivar una mochila vía AJAX (activada = aparece en el catálogo y el PDF)"""
+    try:
+        data = request.get_json(silent=True) or {}
+        activada = 1 if data.get('activada') else 0
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE mochila SET activada = ? WHERE id = ?", (activada, id))
+            conn.commit()
+            if cursor.rowcount == 0:
+                return jsonify({'success': False, 'error': 'Mochila no encontrada'}), 404
+        return jsonify({'success': True, 'activada': bool(activada)})
+    except Exception as e:
+        logger.error(f"Error al activar/desactivar mochila: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route("/admin/mochilas/<int:id>/eliminar", methods=["POST"])
+@login_required
+def admin_mochila_eliminar(id):
+    """Eliminar una mochila y su foto"""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT modelo, imagen FROM mochila WHERE id = ?", (id,))
+            mochila = cursor.fetchone()
+            if mochila:
+                cursor.execute("DELETE FROM mochila WHERE id = ?", (id,))
+                conn.commit()
+        if mochila:
+            borrar_foto_mochila(mochila['imagen'])
+            flash(f'Se eliminó {mochila["modelo"]}.', 'success')
+        else:
+            flash('Esa mochila no existe.', 'error')
+    except Exception as e:
+        logger.error(f"Error al eliminar mochila: {e}")
+        flash(f'Error al eliminar la mochila: {str(e)}', 'error')
+
+    return redirect(url_for('admin_mochilas'))
 
 
 # =============================================================================

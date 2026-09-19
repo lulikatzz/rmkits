@@ -46,6 +46,10 @@
           <span class="icon">📝</span>
           <span>Pedidos</span>
         </a>
+        <a href="{{ url_for('admin_mochilas') }}" class="nav-item {% if request.endpoint.startswith('admin_mochila') %}active{% endif %}">
+          <span class="icon">🎒</span>
+          <span>Mochilas</span>
+        </a>
         <a href="/" target="_blank" class="nav-item">
           <span class="icon">🏪</span>
           <span>Ver Tienda</span>
