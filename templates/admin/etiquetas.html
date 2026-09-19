@@ -1,0 +1,771 @@
+{% extends "admin/base.html" %}
+
+{% block title %}Etiquetas{% endblock %}
+{% block page_title %}🏷️ Etiquetas{% endblock %}
+
+{% block content %}
+<div class="etiquetas-container">
+
+  <div class="table-info">
+    Las etiquetas destacan productos en la tienda: mientras están vigentes, esos productos aparecen
+    <strong>primero</strong> (según la prioridad de su etiqueta) y la etiqueta se ve en la esquina superior
+    izquierda de la tarjeta. Al pasar la fecha de cierre se quitan solas y el producto vuelve a su lugar.
+  </div>
+
+  <div class="etiquetas-layout">
+
+    <!-- ETIQUETAS Y PRIORIDAD -->
+    <section class="panel">
+      <h2>Etiquetas y prioridad</h2>
+      <p class="sub">La de arriba se muestra primero en la tienda. Usá las flechas para cambiar el orden.</p>
+
+      {% if etiquetas %}
+      <div class="table-responsive">
+      <table class="etq-table">
+        <thead>
+          <tr>
+            <th class="center">Prioridad</th>
+            <th>Etiqueta</th>
+            <th class="center" title="Productos o categorías que la tienen asignada (vigente o programada)">En uso</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for etiqueta in etiquetas %}
+          <tr>
+            <td class="center nowrap">
+              <form method="POST" action="{{ url_for('admin_etiqueta_mover', id=etiqueta.id) }}" class="form-mover">
+                <button type="submit" name="direccion" value="subir" class="btn-flecha"
+                        title="Subir prioridad" {% if loop.first %}disabled{% endif %}>▲</button>
+                <span class="prioridad-num">{{ loop.index }}</span>
+                <button type="submit" name="direccion" value="bajar" class="btn-flecha"
+                        title="Bajar prioridad" {% if loop.last %}disabled{% endif %}>▼</button>
+              </form>
+            </td>
+            <td>
+              <span class="etiqueta-chip" style="background: {{ etiqueta.color }}; color: {{ etiqueta.color_texto }};">{{ etiqueta.nombre }}</span>
+            </td>
+            <td class="center">
+              <span class="badge badge-conteo">{{ etiqueta.num_asignaciones }}</span>
+            </td>
+            <td class="right acciones">
+              <button type="button" class="btn-ver" data-editar-etiqueta
+                      data-url="{{ url_for('admin_etiqueta_editar', id=etiqueta.id) }}"
+                      data-nombre="{{ etiqueta.nombre }}" data-color="{{ etiqueta.color }}">Editar</button>
+              <form method="POST" action="{{ url_for('admin_etiqueta_eliminar', id=etiqueta.id) }}" class="inline"
+                    data-confirmar="¿Eliminar la etiqueta “{{ etiqueta.nombre }}”?{% if etiqueta.num_asignaciones %} También se quita de los {{ etiqueta.num_asignaciones }} producto(s)/categoría(s) que la tienen.{% endif %}"
+                    onsubmit="return confirm(this.dataset.confirmar)">
+                <button type="submit" class="btn-quitar">Eliminar</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      {% else %}
+      <p class="vacio">Todavía no hay etiquetas. Creá la primera acá abajo.</p>
+      {% endif %}
+
+      <form method="POST" action="{{ url_for('admin_etiqueta_nueva') }}" class="nueva-etiqueta">
+        <input type="text" name="nombre" placeholder="Nueva etiqueta (ej: Liquidación)"
+               maxlength="{{ largo_maximo }}" required aria-label="Nombre de la nueva etiqueta">
+        <input type="color" name="color" value="#6a1b9a" title="Color de la etiqueta" aria-label="Color de la nueva etiqueta">
+        <button type="submit" class="btn btn-primary btn-sm">Agregar</button>
+      </form>
+    </section>
+
+    <!-- ASIGNAR ETIQUETA -->
+    <section class="panel">
+      <h2>Asignar etiqueta</h2>
+
+      {% if etiquetas %}
+      <form method="POST" action="{{ url_for('admin_etiqueta_asignar') }}" id="formAsignar">
+        <div class="form-group">
+          <label for="etiquetaId">Etiqueta</label>
+          <select id="etiquetaId" name="etiqueta_id" required>
+            {% for etiqueta in etiquetas %}
+            <option value="{{ etiqueta.id }}">{{ etiqueta.nombre }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="campo">
+          <span class="campo-titulo">Aplicar a</span>
+          <div class="opciones-tipo">
+            <label><input type="radio" name="tipo" value="producto" checked> Productos</label>
+            <label><input type="radio" name="tipo" value="categoria"> Categorías completas</label>
+          </div>
+        </div>
+
+        <div class="selector" id="selectorProductos">
+          <div class="selector-barra">
+            <input type="search" id="buscarProducto" placeholder="Buscar por código o nombre..."
+                   autocomplete="off" aria-label="Buscar producto">
+            <span class="sub"><strong id="cantidadSeleccionados">0</strong> seleccionado(s)</span>
+          </div>
+          <div class="selector-lista">
+            {% for producto in productos %}
+            <label class="selector-item">
+              <input type="checkbox" name="productos" value="{{ producto.codigo }}">
+              <span class="codigo">{{ producto.codigo }}</span>
+              <span class="nombre">{{ producto.titulo }}</span>
+              {% if not producto.activo %}<span class="sub">(inactivo)</span>{% elif producto.stock <= 0 %}<span class="sub">(sin stock)</span>{% endif %}
+            </label>
+            {% endfor %}
+            <p class="vacio" id="sinResultados" {% if productos %}hidden{% endif %}>No hay productos que coincidan.</p>
+          </div>
+        </div>
+
+        <div class="selector" id="selectorCategorias" hidden>
+          <div class="selector-lista">
+            {% for categoria in categorias %}
+            <label class="selector-item">
+              <input type="checkbox" name="categorias" value="{{ categoria.id }}">
+              <span class="nombre">{{ categoria.nombre }}</span>
+              <span class="sub">({{ categoria.num_productos }} producto(s))</span>
+            </label>
+            {% else %}
+            <p class="vacio">No hay categorías creadas.</p>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="fechas">
+          <div class="form-group">
+            <label for="fechaInicio">Fecha de inicio</label>
+            <input type="date" id="fechaInicio" name="fecha_inicio" value="{{ hoy }}" required>
+          </div>
+          <div class="form-group">
+            <label for="duracion">Duración (días)</label>
+            <input type="number" id="duracion" min="1" max="3650" value="7" required>
+          </div>
+          <div class="form-group">
+            <label for="fechaCierre">Fecha de cierre</label>
+            <input type="date" id="fechaCierre" name="fecha_fin" min="{{ hoy }}" data-hoy="{{ hoy }}" required>
+          </div>
+        </div>
+        <p class="sub nota-fechas">
+          Se muestra desde que empieza el día de inicio hasta que termina el día de cierre (hora de Argentina).
+          Si un producto ya tenía esta etiqueta en fechas que se superponen, se reemplaza por la nueva.
+        </p>
+
+        <button type="submit" class="btn btn-primary">🏷️ Asignar etiqueta</button>
+      </form>
+      {% else %}
+      <p class="vacio">Creá una etiqueta para poder asignarla.</p>
+      {% endif %}
+    </section>
+  </div>
+
+  <!-- ASIGNACIONES -->
+  <section class="panel">
+    <h2>Etiquetas asignadas</h2>
+
+    {% if asignaciones %}
+    <div class="table-responsive">
+      <table class="etq-table">
+        <thead>
+          <tr>
+            <th>Etiqueta</th>
+            <th>Aplicada a</th>
+            <th>Desde</th>
+            <th>Hasta</th>
+            <th class="center">Duración</th>
+            <th>Estado</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for asignacion in asignaciones %}
+          <tr>
+            <td>
+              <span class="etiqueta-chip" style="background: {{ asignacion.etiqueta_color }}; color: {{ asignacion.color_texto }};">{{ asignacion.etiqueta_nombre }}</span>
+            </td>
+            <td>
+              {% if asignacion.producto_codigo %}
+              <strong>{{ asignacion.producto_codigo }}</strong>
+              {{ asignacion.producto_titulo or '(producto eliminado)' }}
+              {% else %}
+              📁 <strong>{{ asignacion.categoria_nombre }}</strong>
+              <span class="sub">(categoría, {{ asignacion.categoria_productos }} producto(s))</span>
+              {% endif %}
+            </td>
+            <td class="nowrap">{{ asignacion.inicio_txt }}</td>
+            <td class="nowrap">{{ asignacion.fin_txt }}</td>
+            <td class="center nowrap">{{ asignacion.duracion_dias }} día{{ 's' if asignacion.duracion_dias != 1 }}</td>
+            <td class="nowrap">
+              {% if asignacion.vigente %}
+              <span class="estado estado-vigente">Vigente</span>
+              <div class="sub">
+                {% if asignacion.dias_restantes == 1 %}hoy es el último día{% else %}quedan {{ asignacion.dias_restantes }} días{% endif %}
+              </div>
+              {% else %}
+              <span class="estado estado-programada">Programada</span>
+              <div class="sub">
+                {% if asignacion.dias_para_empezar == 1 %}empieza mañana{% else %}empieza en {{ asignacion.dias_para_empezar }} días{% endif %}
+              </div>
+              {% endif %}
+            </td>
+            <td class="right">
+              <form method="POST" action="{{ url_for('admin_etiqueta_quitar_asignacion', id=asignacion.id) }}"
+                    class="inline" onsubmit="return confirm('¿Quitar esta etiqueta?')">
+                <button type="submit" class="btn-quitar">Quitar</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="vacio">No hay etiquetas asignadas. Las que vencen se quitan solas.</p>
+    {% endif %}
+  </section>
+</div>
+
+<!-- Modal Editar Etiqueta -->
+<div id="modalEditarEtiqueta" class="modal" style="display:none">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>✏️ Editar etiqueta</h2>
+      <span class="modal-close" data-cerrar-modal>&times;</span>
+    </div>
+    <div class="modal-body">
+      <form method="POST" id="formEditarEtiqueta">
+        <div class="form-group">
+          <label for="editarNombre">Nombre</label>
+          <input type="text" id="editarNombre" name="nombre" maxlength="{{ largo_maximo }}" required>
+        </div>
+        <div class="form-group">
+          <label for="editarColor">Color</label>
+          <input type="color" id="editarColor" name="color">
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" data-cerrar-modal>Cancelar</button>
+          <button type="submit" class="btn btn-primary">Guardar cambios</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  // ---------------------------------------------------------------------------
+  // Editar etiqueta (modal)
+  // ---------------------------------------------------------------------------
+  const modal = document.getElementById('modalEditarEtiqueta');
+  const formEditar = document.getElementById('formEditarEtiqueta');
+
+  document.querySelectorAll('[data-editar-etiqueta]').forEach(boton => {
+    boton.addEventListener('click', () => {
+      formEditar.action = boton.dataset.url;
+      document.getElementById('editarNombre').value = boton.dataset.nombre;
+      document.getElementById('editarColor').value = boton.dataset.color;
+      modal.style.display = 'block';
+      document.getElementById('editarNombre').focus();
+    });
+  });
+
+  function cerrarModal() {
+    modal.style.display = 'none';
+  }
+  modal.querySelectorAll('[data-cerrar-modal]').forEach(el => el.addEventListener('click', cerrarModal));
+  modal.addEventListener('click', e => { if (e.target === modal) cerrarModal(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') cerrarModal(); });
+
+  // ---------------------------------------------------------------------------
+  // Formulario para asignar (solo existe si hay etiquetas)
+  // ---------------------------------------------------------------------------
+  const formAsignar = document.getElementById('formAsignar');
+  if (!formAsignar) return;
+
+  const selectorProductos = document.getElementById('selectorProductos');
+  const selectorCategorias = document.getElementById('selectorCategorias');
+
+  function tipoElegido() {
+    return formAsignar.querySelector('input[name="tipo"]:checked').value;
+  }
+
+  formAsignar.querySelectorAll('input[name="tipo"]').forEach(radio => {
+    radio.addEventListener('change', () => {
+      selectorProductos.hidden = tipoElegido() !== 'producto';
+      selectorCategorias.hidden = tipoElegido() !== 'categoria';
+    });
+  });
+
+  // Buscador de productos (sin distinguir acentos ni mayúsculas)
+  function normalizar(texto) {
+    return (texto || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  }
+
+  const buscador = document.getElementById('buscarProducto');
+  const itemsProductos = Array.from(selectorProductos.querySelectorAll('.selector-item'));
+  itemsProductos.forEach(item => { item.dataset.busqueda = normalizar(item.textContent); });
+
+  buscador.addEventListener('input', () => {
+    const texto = normalizar(buscador.value.trim());
+    let visibles = 0;
+    itemsProductos.forEach(item => {
+      const coincide = !texto || item.dataset.busqueda.includes(texto);
+      item.hidden = !coincide;
+      if (coincide) visibles++;
+    });
+    document.getElementById('sinResultados').hidden = visibles > 0;
+  });
+
+  // Enter en el buscador no tiene que enviar el formulario
+  buscador.addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); });
+
+  const contador = document.getElementById('cantidadSeleccionados');
+  selectorProductos.addEventListener('change', () => {
+    contador.textContent = selectorProductos.querySelectorAll('input[type="checkbox"]:checked').length;
+  });
+
+  // Fechas: inicio + duración <-> cierre (el día de cierre cuenta, como el de inicio)
+  const fechaInicio = document.getElementById('fechaInicio');
+  const duracion = document.getElementById('duracion');
+  const fechaCierre = document.getElementById('fechaCierre');
+  const HOY = fechaCierre.dataset.hoy;
+  const DIA_MS = 24 * 60 * 60 * 1000;
+
+  // Se trabaja en UTC para que los cambios de horario no corran los días
+  function aFecha(iso) { return new Date(iso + 'T00:00:00Z'); }
+  function sumarDias(iso, dias) {
+    const fecha = aFecha(iso);
+    fecha.setUTCDate(fecha.getUTCDate() + dias);
+    return fecha.toISOString().slice(0, 10);
+  }
+  function diasEntre(desde, hasta) { return Math.round((aFecha(hasta) - aFecha(desde)) / DIA_MS); }
+
+  function actualizarMinimoCierre() {
+    fechaCierre.min = fechaInicio.value && fechaInicio.value > HOY ? fechaInicio.value : HOY;
+  }
+
+  function calcularCierre() {
+    const dias = parseInt(duracion.value, 10);
+    if (fechaInicio.value && dias >= 1) {
+      fechaCierre.value = sumarDias(fechaInicio.value, dias - 1);
+    }
+    actualizarMinimoCierre();
+  }
+
+  function calcularDuracion() {
+    if (!fechaInicio.value || !fechaCierre.value) return;
+    const dias = diasEntre(fechaInicio.value, fechaCierre.value) + 1;
+    if (dias >= 1) duracion.value = dias;
+  }
+
+  fechaInicio.addEventListener('change', calcularCierre);
+  duracion.addEventListener('input', calcularCierre);
+  fechaCierre.addEventListener('change', calcularDuracion);
+  calcularCierre();
+
+  formAsignar.addEventListener('submit', e => {
+    const tipo = tipoElegido();
+    const panel = tipo === 'producto' ? selectorProductos : selectorCategorias;
+    if (!panel.querySelector('input[type="checkbox"]:checked')) {
+      e.preventDefault();
+      alert(tipo === 'producto' ? 'Elegí al menos un producto.' : 'Elegí al menos una categoría.');
+    }
+  });
+})();
+</script>
+
+<style>
+.etiquetas-container [hidden] {
+  display: none !important;
+}
+
+.table-info {
+  background: #f8f9fa;
+  padding: 8px 12px;
+  border-radius: 6px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  color: #495057;
+}
+
+.etiquetas-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+  align-items: start;
+}
+
+.panel {
+  border: 1px solid #ece6f3;
+  border-radius: 8px;
+  padding: 14px 16px;
+  background: white;
+  min-width: 0;
+}
+
+.panel h2 {
+  font-size: 1.05rem;
+  color: #6a1b9a;
+  margin-bottom: 4px;
+}
+
+.sub {
+  font-size: 12px;
+  color: #6c757d;
+}
+
+.panel > .sub {
+  margin-bottom: 10px;
+}
+
+.vacio {
+  padding: 14px;
+  text-align: center;
+  font-size: 13px;
+  color: #6c757d;
+}
+
+.center { text-align: center; }
+.right  { text-align: right; }
+.nowrap { white-space: nowrap; }
+
+form.inline {
+  display: inline;
+}
+
+/* Tablas */
+.table-responsive {
+  overflow-x: auto;
+}
+
+.etq-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 12px;
+}
+
+.etq-table thead {
+  background: #6a1b9a;
+  color: white;
+}
+
+.etq-table th,
+.etq-table td {
+  padding: 6px 8px;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+  vertical-align: middle;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.etq-table th {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .3px;
+  padding: 7px 8px;
+}
+
+/* Editar/Eliminar pasan abajo si no entran uno al lado del otro */
+.etq-table td.acciones {
+  line-height: 2;
+}
+
+.etq-table th.center,
+.etq-table td.center { text-align: center; }
+.etq-table th.right,
+.etq-table td.right { text-align: right; }
+
+.etq-table tbody tr:hover {
+  background-color: #faf7fc;
+}
+
+/* Etiqueta tal como se ve en la tienda */
+.etiqueta-chip {
+  display: inline-block;
+  max-width: 100%;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+
+.badge {
+  padding: 2px 9px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  display: inline-block;
+}
+
+.badge-conteo {
+  background: #ede7f6;
+  color: #4527a0;
+}
+
+/* Prioridad */
+.form-mover {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.prioridad-num {
+  min-width: 18px;
+  font-weight: 700;
+  color: #6a1b9a;
+}
+
+.btn-flecha {
+  width: 26px;
+  height: 26px;
+  border: 1px solid #d1c4e9;
+  background: white;
+  color: #6a1b9a;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.btn-flecha:hover:not(:disabled) {
+  background: #6a1b9a;
+  color: white;
+}
+
+.btn-flecha:disabled {
+  opacity: .3;
+  cursor: default;
+}
+
+/* Botones chicos */
+.btn-ver,
+.btn-quitar {
+  padding: 3px 9px;
+  font-size: 12px;
+  background: white;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-ver {
+  border: 1px solid #6a1b9a;
+  color: #6a1b9a;
+}
+
+.btn-ver:hover {
+  background: #6a1b9a;
+  color: white;
+}
+
+.btn-quitar {
+  border: 1px solid #e57373;
+  color: #c62828;
+}
+
+.btn-quitar:hover {
+  background: #c62828;
+  color: white;
+}
+
+/* Nueva etiqueta */
+.nueva-etiqueta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.nueva-etiqueta input[type="text"] {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.nueva-etiqueta input[type="text"]:focus {
+  outline: none;
+  border-color: #6a1b9a;
+}
+
+/* En pantallas chicas admin.css pone todos los .btn al 100% de ancho */
+.nueva-etiqueta .btn {
+  width: auto;
+  flex: 0 0 auto;
+}
+
+input[type="color"] {
+  width: 44px;
+  height: 34px;
+  padding: 2px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  background: white;
+  cursor: pointer;
+}
+
+.form-group input[type="color"] {
+  width: 64px;
+  height: 40px;
+  padding: 2px;
+}
+
+/* Formulario de asignación */
+.panel .form-group {
+  margin-bottom: 12px;
+}
+
+.panel .form-group label {
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+
+.panel .form-group input,
+.panel .form-group select {
+  padding: 7px 10px;
+  font-size: 14px;
+}
+
+.campo {
+  margin-bottom: 8px;
+}
+
+.campo-titulo {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.opciones-tipo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  font-size: 14px;
+}
+
+.opciones-tipo label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.selector {
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+
+.selector-barra {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  background: #faf7fc;
+  border-bottom: 1px solid #eee;
+}
+
+.selector-barra input[type="search"] {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 10px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.selector-barra input[type="search"]:focus {
+  outline: none;
+  border-color: #6a1b9a;
+}
+
+.selector-lista {
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.selector-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 10px;
+  border-bottom: 1px solid #f3f3f3;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.selector-item:hover {
+  background: #faf7fc;
+}
+
+.selector-item input {
+  flex: 0 0 auto;
+  align-self: center;
+}
+
+.selector-item .codigo {
+  font-weight: 700;
+  color: #6a1b9a;
+  white-space: nowrap;
+}
+
+.selector-item .nombre {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.fechas {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.nota-fechas {
+  margin: -2px 0 12px;
+}
+
+/* Estado de las asignaciones */
+.estado {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.estado-vigente {
+  background: #d4edda;
+  color: #155724;
+}
+
+.estado-programada {
+  background: #e3f2fd;
+  color: #0d47a1;
+}
+
+@media (max-width: 1100px) {
+  .etiquetas-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .fechas {
+    grid-template-columns: 1fr;
+  }
+
+  .etq-table th,
+  .etq-table td {
+    padding: 6px;
+    font-size: 12px;
+  }
+}
+</style>
+{% endblock %}

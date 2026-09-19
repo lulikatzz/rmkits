@@ -8,10 +8,12 @@ import sqlite3
 import urllib.parse
 import logging
 import os
+import re
 import json
 from contextlib import contextmanager
 from functools import wraps
-from datetime import datetime
+from datetime import datetime, date, timedelta, timezone
+from zoneinfo import ZoneInfo
 from config import Config
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill
@@ -207,6 +209,8 @@ def index():
     """Página principal con lista de productos"""
     try:
         productos = get_productos()
+        # Los productos con etiqueta vigente van primero, según la prioridad de la etiqueta
+        destacar_productos_con_etiqueta(productos)
         
         # Obtener categorías de la base de datos
         categorias = []
@@ -585,6 +589,41 @@ def init_database():
                 if max_id is None or max_id < 1199:
                     cursor.execute("INSERT OR REPLACE INTO sqlite_sequence (name, seq) VALUES ('pedido', 1199)")
             
+            # Etiquetas para destacar productos en la tienda (ver sección ETIQUETAS)
+            cursor.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='etiqueta'")
+            etiqueta_es_nueva = cursor.fetchone() is None
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS etiqueta (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    nombre TEXT NOT NULL UNIQUE COLLATE NOCASE,
+                    color TEXT NOT NULL,
+                    prioridad INTEGER NOT NULL,
+                    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            if etiqueta_es_nueva:
+                # La primera vez quedan cargadas las etiquetas de ejemplo
+                cursor.executemany(
+                    "INSERT INTO etiqueta (nombre, color, prioridad) VALUES (?, ?, ?)",
+                    [('Nuevo', '#2e7d32', 1), ('Descuento', '#c62828', 2), ('Oportunidad', '#ffcc00', 3)]
+                )
+
+            # Cada asignación apunta a un producto (por código, que no cambia al
+            # reimportar el Excel) o a una categoría (por id, que no cambia al renombrarla)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS etiqueta_asignacion (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    etiqueta_id INTEGER NOT NULL,
+                    producto_codigo TEXT,
+                    categoria_id INTEGER,
+                    fecha_inicio TEXT NOT NULL,
+                    fecha_fin TEXT NOT NULL,
+                    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (etiqueta_id) REFERENCES etiqueta(id),
+                    FOREIGN KEY (categoria_id) REFERENCES categoria(id)
+                )
+            """)
+
             conn.commit()
             logger.info("✓ Tablas de base de datos inicializadas correctamente")
     except Exception as e:
@@ -2080,6 +2119,15 @@ def admin_producto_editar(id):
                                 except Exception as e:
                                     logger.warning(f"No se pudo eliminar la imagen anterior: {e}")
                 
+                # Si cambia el código, las etiquetas asignadas al producto lo siguen
+                cursor.execute("SELECT codigo FROM producto WHERE id=?", (id,))
+                anterior = cursor.fetchone()
+                if anterior and anterior['codigo'] != codigo_producto:
+                    cursor.execute(
+                        "UPDATE etiqueta_asignacion SET producto_codigo = ? WHERE producto_codigo = ?",
+                        (codigo_producto, anterior['codigo'])
+                    )
+
                 cursor.execute("""
                     UPDATE producto 
                     SET codigo=?, titulo=?, descripcion=?, precio=?, minimo=?, multiplo=?, stock=?, imagen=?, categoria=?
@@ -2181,6 +2229,11 @@ def admin_producto_eliminar(id):
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
+            # Quitar también las etiquetas asignadas al producto
+            cursor.execute("""
+                DELETE FROM etiqueta_asignacion
+                WHERE producto_codigo = (SELECT codigo FROM producto WHERE id = ?)
+            """, (id,))
             cursor.execute("DELETE FROM producto WHERE id=?", (id,))
             conn.commit()
         
@@ -2331,7 +2384,8 @@ def admin_categoria_eliminar(id):
                 # Reasignar productos a la categoría destino
                 cursor.execute("UPDATE producto SET categoria = ? WHERE categoria = ?", (categoria_destino, nombre_categoria))
             
-            # Eliminar la categoría
+            # Eliminar la categoría y las etiquetas asignadas a ella
+            cursor.execute("DELETE FROM etiqueta_asignacion WHERE categoria_id = ?", (id,))
             cursor.execute("DELETE FROM categoria WHERE id = ?", (id,))
             conn.commit()
         
@@ -2434,6 +2488,420 @@ def admin_quitar_producto_nuevo(id):
         flash(f'Error: {str(e)}', 'error')
     
     return redirect(url_for('admin_productos_nuevos'))
+
+
+# =============================================================================
+# ETIQUETAS (destacar productos en la tienda: Nuevo, Descuento, Oportunidad...)
+# =============================================================================
+# Una etiqueta se asigna a productos (por código) o a categorías completas,
+# entre una fecha de inicio y una de cierre (las dos inclusive, hora de Argentina).
+# Mientras está vigente, el producto aparece primero en el catálogo, ordenado
+# por la prioridad de su etiqueta, y la etiqueta se ve en la esquina superior
+# izquierda de su tarjeta. Al pasar la fecha de cierre deja de aplicarse sola y
+# el producto vuelve a su lugar original.
+
+try:
+    ZONA_HORARIA_LOCAL = ZoneInfo("America/Argentina/Buenos_Aires")
+except Exception:
+    # Si el servidor no tiene la base de zonas horarias: Argentina es UTC-3 todo el año
+    ZONA_HORARIA_LOCAL = timezone(timedelta(hours=-3))
+
+# Tiene que entrar en la esquina de la tarjeta del producto
+LARGO_MAXIMO_ETIQUETA = 20
+COLOR_ETIQUETA_DEFAULT = '#6a1b9a'
+
+
+def hoy_local():
+    """Fecha de hoy en Argentina (el servidor de Render usa UTC)."""
+    return datetime.now(ZONA_HORARIA_LOCAL).date()
+
+
+def color_valido(color):
+    """True si es un color #rrggbb, el formato que manda <input type="color">."""
+    return bool(re.fullmatch(r'#[0-9a-fA-F]{6}', color or ''))
+
+
+def color_texto_etiqueta(color_fondo):
+    """Devuelve blanco o casi negro: el que mejor se lea sobre el color de la etiqueta."""
+    if not color_valido(color_fondo):
+        return '#ffffff'
+
+    def lineal(canal_hex):
+        c = int(canal_hex, 16) / 255
+        return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+    r, g, b = (lineal(color_fondo[i:i + 2]) for i in (1, 3, 5))
+    luminancia = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    # Contraste contra blanco (luminancia 1) y contra #1a1a1a (luminancia ~0.0103)
+    contraste_blanco = 1.05 / (luminancia + 0.05)
+    contraste_oscuro = (luminancia + 0.05) / 0.0603
+    return '#ffffff' if contraste_blanco >= contraste_oscuro else '#1a1a1a'
+
+
+def etiquetas_vigentes_por_codigo(cursor):
+    """
+    Devuelve {codigo_producto: etiqueta} con la etiqueta vigente hoy de cada
+    producto, ya sea asignada al producto o a su categoría. Si tiene varias,
+    gana la de mayor prioridad (la de número más bajo).
+    """
+    hoy = hoy_local().isoformat()
+    cursor.execute("""
+        SELECT a.producto_codigo AS codigo, e.id AS etiqueta_id, e.nombre AS nombre,
+               e.color AS color, e.prioridad AS prioridad
+        FROM etiqueta_asignacion a
+        JOIN etiqueta e ON e.id = a.etiqueta_id
+        WHERE a.producto_codigo IS NOT NULL
+          AND a.fecha_inicio <= ? AND a.fecha_fin >= ?
+        UNION ALL
+        SELECT p.codigo, e.id, e.nombre, e.color, e.prioridad
+        FROM etiqueta_asignacion a
+        JOIN etiqueta e ON e.id = a.etiqueta_id
+        JOIN categoria c ON c.id = a.categoria_id
+        JOIN producto p ON p.categoria = c.nombre
+        WHERE a.categoria_id IS NOT NULL
+          AND a.fecha_inicio <= ? AND a.fecha_fin >= ?
+        ORDER BY prioridad, etiqueta_id
+    """, (hoy, hoy, hoy, hoy))
+
+    etiquetas = {}
+    for fila in cursor.fetchall():
+        # Vienen ordenadas por prioridad: la primera de cada producto es la que gana
+        etiquetas.setdefault(fila['codigo'], {
+            'nombre': fila['nombre'],
+            'color': fila['color'],
+            'color_texto': color_texto_etiqueta(fila['color']),
+            'prioridad': fila['prioridad']
+        })
+    return etiquetas
+
+
+def destacar_productos_con_etiqueta(productos):
+    """
+    Agrega a cada producto su etiqueta vigente (o None) y reordena la lista:
+    primero los que tienen etiqueta, por prioridad de la etiqueta, y después el
+    resto en su orden original (el sort es estable). Si falla la consulta, el
+    catálogo se muestra igual, sin etiquetas.
+    """
+    try:
+        with get_db_connection() as conn:
+            etiquetas = etiquetas_vigentes_por_codigo(conn.cursor())
+    except Exception as e:
+        logger.error(f"Error al obtener etiquetas de productos: {e}")
+        etiquetas = {}
+
+    for producto in productos:
+        producto['etiqueta'] = etiquetas.get(producto['codigo'])
+    productos.sort(key=lambda p: p['etiqueta']['prioridad'] if p['etiqueta'] else float('inf'))
+    return productos
+
+
+def ids_etiquetas_por_prioridad(cursor):
+    """Ids de las etiquetas, de la de mayor prioridad a la de menor."""
+    cursor.execute("SELECT id FROM etiqueta ORDER BY prioridad, id")
+    return [row['id'] for row in cursor.fetchall()]
+
+
+def guardar_orden_etiquetas(cursor, ids_en_orden):
+    """Renumera la prioridad de las etiquetas 1, 2, 3... según el orden recibido."""
+    cursor.executemany(
+        "UPDATE etiqueta SET prioridad = ? WHERE id = ?",
+        [(posicion, etiqueta_id) for posicion, etiqueta_id in enumerate(ids_en_orden, start=1)]
+    )
+
+
+def leer_nombre_y_color_etiqueta():
+    """Lee y valida nombre y color del formulario. Devuelve (nombre, color, error)."""
+    nombre = request.form.get('nombre', '').strip()
+    color = request.form.get('color', '').strip()
+
+    if not nombre:
+        return nombre, color, 'El nombre de la etiqueta es requerido'
+    if len(nombre) > LARGO_MAXIMO_ETIQUETA:
+        return nombre, color, f'El nombre puede tener hasta {LARGO_MAXIMO_ETIQUETA} caracteres para que entre en la tarjeta'
+    if not color_valido(color):
+        color = COLOR_ETIQUETA_DEFAULT
+    return nombre, color, None
+
+
+@app.route("/admin/etiquetas")
+@login_required
+def admin_etiquetas():
+    """Etiquetas: prioridad, formulario para asignarlas y asignaciones vigentes/programadas"""
+    try:
+        hoy = hoy_local()
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+
+            # Las asignaciones vencidas ya no se muestran en la tienda: se borran
+            cursor.execute("DELETE FROM etiqueta_asignacion WHERE fecha_fin < ?", (hoy.isoformat(),))
+            if cursor.rowcount > 0:
+                logger.info(f"Se eliminaron {cursor.rowcount} etiqueta(s) vencida(s)")
+            conn.commit()
+
+            cursor.execute("""
+                SELECT e.*, COUNT(a.id) AS num_asignaciones
+                FROM etiqueta e
+                LEFT JOIN etiqueta_asignacion a ON a.etiqueta_id = e.id
+                GROUP BY e.id
+                ORDER BY e.prioridad, e.id
+            """)
+            etiquetas = [dict(row) for row in cursor.fetchall()]
+
+            cursor.execute("""
+                SELECT a.id, a.producto_codigo, a.categoria_id, a.fecha_inicio, a.fecha_fin,
+                       e.nombre AS etiqueta_nombre, e.color AS etiqueta_color, e.prioridad,
+                       (SELECT titulo FROM producto WHERE codigo = a.producto_codigo LIMIT 1) AS producto_titulo,
+                       c.nombre AS categoria_nombre,
+                       (SELECT COUNT(*) FROM producto WHERE categoria = c.nombre) AS categoria_productos
+                FROM etiqueta_asignacion a
+                JOIN etiqueta e ON e.id = a.etiqueta_id
+                LEFT JOIN categoria c ON c.id = a.categoria_id
+            """)
+            asignaciones = [dict(row) for row in cursor.fetchall()]
+
+            cursor.execute("SELECT codigo, titulo, stock, activo FROM producto ORDER BY codigo DESC")
+            productos = [dict(row) for row in cursor.fetchall()]
+
+            cursor.execute("""
+                SELECT c.id, c.nombre, COUNT(p.id) AS num_productos
+                FROM categoria c
+                LEFT JOIN producto p ON p.categoria = c.nombre
+                GROUP BY c.id
+                ORDER BY c.nombre
+            """)
+            categorias = [dict(row) for row in cursor.fetchall()]
+
+        for etiqueta in etiquetas:
+            etiqueta['color_texto'] = color_texto_etiqueta(etiqueta['color'])
+
+        for asignacion in asignaciones:
+            inicio = date.fromisoformat(asignacion['fecha_inicio'])
+            fin = date.fromisoformat(asignacion['fecha_fin'])
+            asignacion['vigente'] = inicio <= hoy
+            asignacion['duracion_dias'] = (fin - inicio).days + 1
+            asignacion['dias_restantes'] = (fin - hoy).days + 1  # contando hoy
+            asignacion['dias_para_empezar'] = (inicio - hoy).days
+            asignacion['inicio_txt'] = inicio.strftime('%d/%m/%Y')
+            asignacion['fin_txt'] = fin.strftime('%d/%m/%Y')
+            asignacion['color_texto'] = color_texto_etiqueta(asignacion['etiqueta_color'])
+
+        # Primero las vigentes y después las programadas, por prioridad y vencimiento
+        asignaciones.sort(key=lambda a: (not a['vigente'], a['prioridad'], a['fecha_fin'], a['id']))
+
+        return render_template(
+            "admin/etiquetas.html",
+            etiquetas=etiquetas,
+            asignaciones=asignaciones,
+            productos=productos,
+            categorias=categorias,
+            hoy=hoy.isoformat(),
+            largo_maximo=LARGO_MAXIMO_ETIQUETA
+        )
+    except Exception as e:
+        logger.error(f"Error al cargar etiquetas: {e}")
+        flash('Error al cargar etiquetas', 'error')
+        return redirect(url_for('admin_dashboard'))
+
+
+@app.route("/admin/etiqueta/nueva", methods=["POST"])
+@login_required
+def admin_etiqueta_nueva():
+    """Crear etiqueta (queda última en prioridad)"""
+    nombre, color, error = leer_nombre_y_color_etiqueta()
+    if error:
+        flash(error, 'error')
+        return redirect(url_for('admin_etiquetas'))
+
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COALESCE(MAX(prioridad), 0) + 1 FROM etiqueta")
+            prioridad = cursor.fetchone()[0]
+            cursor.execute(
+                "INSERT INTO etiqueta (nombre, color, prioridad) VALUES (?, ?, ?)",
+                (nombre, color, prioridad)
+            )
+            conn.commit()
+        flash(f'Etiqueta "{nombre}" creada', 'success')
+    except sqlite3.IntegrityError:
+        flash('Ya existe una etiqueta con ese nombre', 'error')
+    except Exception as e:
+        logger.error(f"Error al crear etiqueta: {e}")
+        flash(f'Error al crear etiqueta: {str(e)}', 'error')
+
+    return redirect(url_for('admin_etiquetas'))
+
+
+@app.route("/admin/etiqueta/<int:id>/editar", methods=["POST"])
+@login_required
+def admin_etiqueta_editar(id):
+    """Cambiar nombre y color de una etiqueta"""
+    nombre, color, error = leer_nombre_y_color_etiqueta()
+    if error:
+        flash(error, 'error')
+        return redirect(url_for('admin_etiquetas'))
+
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE etiqueta SET nombre = ?, color = ? WHERE id = ?", (nombre, color, id))
+            conn.commit()
+            if cursor.rowcount == 0:
+                flash('Etiqueta no encontrada', 'error')
+            else:
+                flash('Etiqueta actualizada', 'success')
+    except sqlite3.IntegrityError:
+        flash('Ya existe una etiqueta con ese nombre', 'error')
+    except Exception as e:
+        logger.error(f"Error al editar etiqueta: {e}")
+        flash(f'Error al editar etiqueta: {str(e)}', 'error')
+
+    return redirect(url_for('admin_etiquetas'))
+
+
+@app.route("/admin/etiqueta/<int:id>/eliminar", methods=["POST"])
+@login_required
+def admin_etiqueta_eliminar(id):
+    """Eliminar una etiqueta junto con todas sus asignaciones"""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM etiqueta_asignacion WHERE etiqueta_id = ?", (id,))
+            cursor.execute("DELETE FROM etiqueta WHERE id = ?", (id,))
+            # Que las prioridades que quedan sigan siendo 1, 2, 3...
+            guardar_orden_etiquetas(cursor, ids_etiquetas_por_prioridad(cursor))
+            conn.commit()
+        flash('Etiqueta eliminada', 'success')
+    except Exception as e:
+        logger.error(f"Error al eliminar etiqueta: {e}")
+        flash(f'Error al eliminar etiqueta: {str(e)}', 'error')
+
+    return redirect(url_for('admin_etiquetas'))
+
+
+@app.route("/admin/etiqueta/<int:id>/mover", methods=["POST"])
+@login_required
+def admin_etiqueta_mover(id):
+    """Subir o bajar una etiqueta en la prioridad (intercambia lugar con la vecina)"""
+    direccion = request.form.get('direccion')
+    if direccion not in ('subir', 'bajar'):
+        return redirect(url_for('admin_etiquetas'))
+
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            ids = ids_etiquetas_por_prioridad(cursor)
+            if id in ids:
+                actual = ids.index(id)
+                vecina = actual - 1 if direccion == 'subir' else actual + 1
+                if 0 <= vecina < len(ids):
+                    ids[actual], ids[vecina] = ids[vecina], ids[actual]
+                    guardar_orden_etiquetas(cursor, ids)
+                    conn.commit()
+    except Exception as e:
+        logger.error(f"Error al cambiar prioridad de etiqueta: {e}")
+        flash('Error al cambiar la prioridad', 'error')
+
+    return redirect(url_for('admin_etiquetas'))
+
+
+@app.route("/admin/etiquetas/asignar", methods=["POST"])
+@login_required
+def admin_etiqueta_asignar():
+    """Asignar una etiqueta a productos o a categorías completas entre dos fechas"""
+    tipo = request.form.get('tipo')
+    try:
+        etiqueta_id = int(request.form.get('etiqueta_id', ''))
+        fecha_inicio = date.fromisoformat(request.form.get('fecha_inicio', ''))
+        fecha_fin = date.fromisoformat(request.form.get('fecha_fin', ''))
+    except ValueError:
+        flash('Elegí una etiqueta y fechas válidas', 'error')
+        return redirect(url_for('admin_etiquetas'))
+
+    if fecha_fin < fecha_inicio:
+        flash('La fecha de cierre no puede ser anterior a la de inicio', 'error')
+        return redirect(url_for('admin_etiquetas'))
+    if fecha_fin < hoy_local():
+        flash('La fecha de cierre ya pasó', 'error')
+        return redirect(url_for('admin_etiquetas'))
+
+    if tipo == 'producto':
+        columna = 'producto_codigo'
+        destinos = [c.strip() for c in request.form.getlist('productos') if c.strip()]
+    elif tipo == 'categoria':
+        columna = 'categoria_id'
+        destinos = [int(c) for c in request.form.getlist('categorias') if c.isdigit()]
+    else:
+        flash('Elegí si la etiqueta va a productos o a categorías', 'error')
+        return redirect(url_for('admin_etiquetas'))
+
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+
+            cursor.execute("SELECT nombre FROM etiqueta WHERE id = ?", (etiqueta_id,))
+            etiqueta = cursor.fetchone()
+            if not etiqueta:
+                flash('La etiqueta elegida no existe', 'error')
+                return redirect(url_for('admin_etiquetas'))
+
+            # Solo productos/categorías que existen, sin repetir
+            if tipo == 'producto':
+                cursor.execute("SELECT codigo FROM producto")
+                existentes = {row['codigo'] for row in cursor.fetchall()}
+            else:
+                cursor.execute("SELECT id FROM categoria")
+                existentes = {row['id'] for row in cursor.fetchall()}
+            destinos = [d for d in dict.fromkeys(destinos) if d in existentes]
+
+            if not destinos:
+                flash('Elegí al menos un producto o categoría', 'error')
+                return redirect(url_for('admin_etiquetas'))
+
+            reemplazadas = 0
+            for destino in destinos:
+                # Si ya tenía esta etiqueta en fechas que se superponen, la nueva la reemplaza
+                cursor.execute(f"""
+                    DELETE FROM etiqueta_asignacion
+                    WHERE etiqueta_id = ? AND {columna} = ?
+                      AND fecha_inicio <= ? AND fecha_fin >= ?
+                """, (etiqueta_id, destino, fecha_fin.isoformat(), fecha_inicio.isoformat()))
+                reemplazadas += cursor.rowcount
+
+                cursor.execute(f"""
+                    INSERT INTO etiqueta_asignacion (etiqueta_id, {columna}, fecha_inicio, fecha_fin)
+                    VALUES (?, ?, ?, ?)
+                """, (etiqueta_id, destino, fecha_inicio.isoformat(), fecha_fin.isoformat()))
+
+            conn.commit()
+
+        destino_txt = 'producto(s)' if tipo == 'producto' else 'categoría(s)'
+        mensaje = f'Etiqueta "{etiqueta["nombre"]}" asignada a {len(destinos)} {destino_txt}'
+        if reemplazadas:
+            mensaje += f' (reemplazó {reemplazadas} asignación(es) anterior(es) con fechas superpuestas)'
+        flash(mensaje, 'success')
+    except Exception as e:
+        logger.error(f"Error al asignar etiqueta: {e}")
+        flash(f'Error al asignar etiqueta: {str(e)}', 'error')
+
+    return redirect(url_for('admin_etiquetas'))
+
+
+@app.route("/admin/etiquetas/asignacion/<int:id>/quitar", methods=["POST"])
+@login_required
+def admin_etiqueta_quitar_asignacion(id):
+    """Quitar una etiqueta de un producto o categoría antes de que venza"""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM etiqueta_asignacion WHERE id = ?", (id,))
+            conn.commit()
+        flash('Etiqueta quitada', 'success')
+    except Exception as e:
+        logger.error(f"Error al quitar etiqueta: {e}")
+        flash(f'Error al quitar etiqueta: {str(e)}', 'error')
+
+    return redirect(url_for('admin_etiquetas'))
 
 
 # =============================================================================

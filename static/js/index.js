@@ -214,6 +214,16 @@ function renderProductos() {
     
     // Configurar elementos básicos
     card.dataset.categoria = normalizarCategoriaValor(p.categoria);
+
+    // Etiqueta destacada (Nuevo, Descuento...) en la esquina superior izquierda
+    if (p.etiqueta) {
+      const etiqueta = node.querySelector(".etiqueta-producto");
+      etiqueta.textContent = p.etiqueta.nombre;
+      etiqueta.style.backgroundColor = p.etiqueta.color;
+      etiqueta.style.color = p.etiqueta.color_texto;
+      etiqueta.hidden = false;
+      card.classList.add("con-etiqueta");
+    }
     node.querySelector(".img").src = `/uploads/${p.imagen}`;
     node.querySelector(".img").alt = p.titulo;
     node.querySelector(".titulo").textContent = p.titulo;

@@ -264,6 +264,37 @@ header h1 {
 }
 
 /* =============================================================================
+   ETIQUETAS DESTACADAS (Nuevo, Descuento, Oportunidad...)
+   ============================================================================= */
+
+/* Espacio arriba para que la etiqueta no tape la imagen ni el título */
+.card.con-etiqueta {
+  padding-top: 30px;
+}
+
+.etiqueta-producto {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  max-width: calc(100% - 20px);
+  padding: 4px 12px;
+  border-bottom-right-radius: 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.35;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+.etiqueta-producto[hidden] {
+  display: none;
+}
+
+/* =============================================================================
    ACCIONES DE PRODUCTO
    ============================================================================= */
 
