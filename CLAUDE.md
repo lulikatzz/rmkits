@@ -72,6 +72,14 @@ All routes and logic live in `app.py` (~2600 lines). There are no blueprints, mo
 - **Dates:** "today" comes from `hoy_local()`, which uses Argentina time, not the server's UTC. An expired assignment stops showing right away, and its row is deleted the next time `/admin/etiquetas` is opened.
 - **Manual cascades:** SQLite foreign keys aren't enforced here, so editing a product's code, deleting a product, or deleting a category updates `etiqueta_asignacion` by hand in those routes. Labels are not part of the "exportar todo" backup.
 
+### Catálogo de mochilas (admin only)
+
+- **What it is:** a second catalog, separate from the store's products, ported from a Windows Flask app the user had (`Catálogo de Mochilas`, packaged with PyInstaller). It lives entirely under `/admin/mochilas`: list, catalog view, add/edit/delete, activate/deactivate, and a PDF to share. Nothing about it is public except the photo files.
+- **Data:** table `mochila` in the same `productos.db` (`modelo, precio, cantidad, descripcion, medidas, imagen, activada, orden`). Photos go in `UPLOAD_FOLDER/mochilas` and are served at `/uploads/mochilas/<file>`. Only rows with `activada = 1` appear in the catalog view and the PDF.
+- **Seed:** `datos_iniciales/mochilas/` holds the original app's 31 items (`mochilas.json`) and their photos. `importar_mochilas_iniciales()` loads them once, when `init_database()` first creates the table.
+- **PDF:** built with fpdf2 + Pillow in `generar_pdf_mochilas()`, A4 with two items per page, matching the original layout (the `PDF_*` constants are millimetres). The core PDF fonts are latin-1 only, so every string goes through `texto_pdf()` first; a detail line that doesn't fit between the model and the price is shortened with "...".
+- **Prices:** integers, shown as `$ 12.990` through the `precio_ar` Jinja filter — the store's own templates format prices differently (`{:,.0f}`).
+
 ### Checkout flow
 
 1. `static/js/carrito.js` validates the form and POSTs JSON to `/guardar-pedido`.
