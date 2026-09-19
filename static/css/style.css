@@ -254,6 +254,9 @@ header h1 {
 .detalle {
   font-size: 0.65rem;
   display: flex;
+  /* Mínimo y múltiplo en dos líneas siempre, así todas las tarjetas de una
+     fila tienen el mismo alto (en celular, con una columna, van en una línea) */
+  flex-direction: column;
   gap: 6px;
   flex-wrap: wrap;
   margin-top: 2px;
@@ -954,6 +957,10 @@ header h1 {
 @media (max-width: 480px) {
   .grid {
     grid-template-columns: 1fr;
+  }
+
+  .detalle {
+    flex-direction: row;
   }
 
   .filtros {
