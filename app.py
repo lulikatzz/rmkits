@@ -3309,11 +3309,12 @@ def admin_mochila_eliminar(id):
 # subtotal de cada producto, y el total. A4 vertical, medidas en mm.
 
 PEDIDO_PDF_MARGEN = 10
-PEDIDO_PDF_ALTO_FILA = 24
-PEDIDO_PDF_LADO_FOTO = 20
-# Foto, producto, cantidad, precio unitario, subtotal (suman 190 = A4 menos márgenes)
-PEDIDO_PDF_COLUMNAS = (24, 84, 20, 30, 32)
+PEDIDO_PDF_ALTO_FILA = 14
+PEDIDO_PDF_LADO_FOTO = 12
+# Producto, cantidad, precio unitario, subtotal, foto (suman 190 = A4 menos márgenes)
+PEDIDO_PDF_COLUMNAS = (98, 18, 30, 28, 16)
 PEDIDO_PDF_GRIS = (240, 240, 240)
+PEDIDO_PDF_VIOLETA = (106, 27, 154)  # #6a1b9a, el violeta de la página
 
 
 class PedidoPDF(FPDF):
@@ -3368,13 +3369,13 @@ def nombre_archivo_pedido(pedido):
 
 def dibujar_encabezado_tabla_pedido(pdf):
     pdf.set_font('helvetica', 'B', 9)
-    pdf.set_fill_color(*PDF_VERDE)
-    pdf.set_text_color(20, 20, 20)
-    titulos = ('Foto', 'Producto', 'Cant.', 'Precio unit.', 'Subtotal')
-    alineaciones = ('C', 'L', 'C', 'R', 'R')
+    pdf.set_fill_color(*PEDIDO_PDF_VIOLETA)
+    pdf.set_text_color(255, 255, 255)
+    titulos = ('Producto', 'Cant.', 'Precio unit.', 'Subtotal', 'Foto')
+    alineaciones = ('L', 'C', 'R', 'R', 'C')
     for ancho, titulo, alineacion in zip(PEDIDO_PDF_COLUMNAS, titulos, alineaciones):
-        pdf.cell(ancho, 8, titulo, align=alineacion, fill=True)
-    pdf.ln(8)
+        pdf.cell(ancho, 7, titulo, align=alineacion, fill=True)
+    pdf.ln(7)
 
 
 def dibujar_fila_pedido(pdf, item, ruta_foto, par):
@@ -3384,47 +3385,28 @@ def dibujar_fila_pedido(pdf, item, ruta_foto, par):
         pdf.set_fill_color(*PEDIDO_PDF_GRIS)
         pdf.rect(x, y, sum(PEDIDO_PDF_COLUMNAS), alto, style='F')
 
-    # Foto centrada en su columna
-    ancho_foto = PEDIDO_PDF_COLUMNAS[0]
-    lado = PEDIDO_PDF_LADO_FOTO
-    foto_puesta = False
-    if ruta_foto:
-        try:
-            imagen, (w_px, h_px) = miniatura_pdf(ruta_foto)
-            escala = lado / max(w_px, h_px)
-            w_mm, h_mm = w_px * escala, h_px * escala
-            pdf.image(imagen, x=x + (ancho_foto - w_mm) / 2, y=y + (alto - h_mm) / 2, w=w_mm, h=h_mm)
-            foto_puesta = True
-        except Exception as e:
-            logger.warning(f"No se pudo poner la foto {ruta_foto} en el PDF del pedido: {e}")
-    if not foto_puesta:
-        pdf.set_draw_color(200, 200, 200)
-        pdf.rect(x + (ancho_foto - lado) / 2, y + (alto - lado) / 2, lado, lado)
-        pdf.set_font('helvetica', '', 7)
-        pdf.set_text_color(150, 150, 150)
-        pdf.set_xy(x, y)
-        pdf.cell(ancho_foto, alto, 'Sin foto', align='C')
-
-    # Código arriba y título abajo, hasta 3 renglones
-    ancho_producto = PEDIDO_PDF_COLUMNAS[1] - 2
+    # Código y título en un renglón; si el título no entra, pasa a un segundo renglón
+    ancho_producto = PEDIDO_PDF_COLUMNAS[0] - 2
+    codigo = texto_pdf(item.get('codigo'))
     pdf.set_font('helvetica', '', 9)
-    renglones = pdf.multi_cell(ancho_producto, 4.5, texto_pdf(item.get('titulo')),
+    renglones = pdf.multi_cell(ancho_producto, 4, texto_pdf(item.get('titulo')),
                                dry_run=True, output='LINES')
-    if len(renglones) > 3:
-        renglones = renglones[:3]
-        renglones[2] = renglones[2][:-3].rstrip() + '...'
-    alto_texto = 4.5 * (len(renglones) + 1)
+    if len(renglones) > 2:
+        renglones = renglones[:2]
+        renglones[1] = renglones[1][:-3].rstrip() + '...'
+    alto_texto = 4 * (len(renglones) + (1 if codigo else 0))
     y_texto = y + (alto - alto_texto) / 2
-    x_producto = x + ancho_foto + 1
-    pdf.set_xy(x_producto, y_texto)
-    pdf.set_font('helvetica', 'B', 8)
-    pdf.set_text_color(110, 110, 110)
-    pdf.cell(ancho_producto, 4.5, texto_pdf(item.get('codigo')))
+    if codigo:
+        pdf.set_xy(x + 1, y_texto)
+        pdf.set_font('helvetica', 'B', 7)
+        pdf.set_text_color(110, 110, 110)
+        pdf.cell(ancho_producto, 4, codigo)
+        y_texto += 4
     pdf.set_font('helvetica', '', 9)
     pdf.set_text_color(20, 20, 20)
-    for i, renglon in enumerate(renglones, start=1):
-        pdf.set_xy(x_producto, y_texto + 4.5 * i)
-        pdf.cell(ancho_producto, 4.5, renglon)
+    for i, renglon in enumerate(renglones):
+        pdf.set_xy(x + 1, y_texto + 4 * i)
+        pdf.cell(ancho_producto, 4, renglon)
 
     cantidad = a_numero(item.get('cantidad'))
     precio = a_numero(item.get('precio'))
@@ -3433,10 +3415,33 @@ def dibujar_fila_pedido(pdf, item, ruta_foto, par):
         (formato_precio_ar(round(precio)), 'R', ''),
         (formato_precio_ar(round(precio * cantidad)), 'R', 'B'),
     )
-    pdf.set_xy(x + ancho_foto + PEDIDO_PDF_COLUMNAS[1], y)
-    for ancho, (texto, alineacion, estilo) in zip(PEDIDO_PDF_COLUMNAS[2:], valores):
+    pdf.set_xy(x + PEDIDO_PDF_COLUMNAS[0], y)
+    for ancho, (texto, alineacion, estilo) in zip(PEDIDO_PDF_COLUMNAS[1:4], valores):
         pdf.set_font('helvetica', estilo, 10)
         pdf.cell(ancho, alto, texto, align=alineacion)
+
+    # Foto centrada en la última columna
+    x_foto = x + sum(PEDIDO_PDF_COLUMNAS[:4])
+    ancho_foto = PEDIDO_PDF_COLUMNAS[4]
+    lado = PEDIDO_PDF_LADO_FOTO
+    foto_puesta = False
+    if ruta_foto:
+        try:
+            imagen, (w_px, h_px) = miniatura_pdf(ruta_foto)
+            escala = lado / max(w_px, h_px)
+            w_mm, h_mm = w_px * escala, h_px * escala
+            pdf.image(imagen, x=x_foto + (ancho_foto - w_mm) / 2, y=y + (alto - h_mm) / 2, w=w_mm, h=h_mm)
+            foto_puesta = True
+        except Exception as e:
+            logger.warning(f"No se pudo poner la foto {ruta_foto} en el PDF del pedido: {e}")
+    if not foto_puesta:
+        pdf.set_draw_color(200, 200, 200)
+        pdf.rect(x_foto + (ancho_foto - lado) / 2, y + (alto - lado) / 2, lado, lado)
+        pdf.set_font('helvetica', '', 5)
+        pdf.set_text_color(150, 150, 150)
+        pdf.set_xy(x_foto, y)
+        pdf.cell(ancho_foto, alto, 'Sin foto', align='C')
+
     pdf.set_xy(x, y + alto)
 
 
@@ -3510,12 +3515,9 @@ def generar_pdf_pedido(pedido, fotos):
     if pdf.get_y() + 14 > limite:
         pdf.add_page()
     pdf.ln(2)
-    unidades = sum(a_numero(item.get('cantidad')) for item in items)
-    pdf.set_font('helvetica', '', 10)
-    pdf.set_text_color(90, 90, 90)
-    pdf.cell(100, 10, f"{len(items)} productos, {unidades:g} unidades")
-    pdf.set_fill_color(*PDF_VERDE)
-    pdf.set_text_color(20, 20, 20)
+    pdf.set_x(pdf.l_margin + 100)
+    pdf.set_fill_color(*PEDIDO_PDF_VIOLETA)
+    pdf.set_text_color(255, 255, 255)
     pdf.set_font('helvetica', 'B', 13)
     pdf.cell(0, 10, f"TOTAL  {formato_precio_ar(round(a_numero(pedido.get('total'))))}  ",
              align='R', fill=True)
