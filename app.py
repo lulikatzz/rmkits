@@ -10,6 +10,7 @@ import logging
 import os
 import re
 import json
+import secrets
 import time
 from contextlib import contextmanager
 from functools import wraps
@@ -626,6 +627,11 @@ def init_database():
                 cursor.execute("SELECT envio_dni_destinatario FROM pedido LIMIT 1")
             except sqlite3.OperationalError:
                 cursor.execute("ALTER TABLE pedido ADD COLUMN envio_dni_destinatario TEXT")
+
+            try:
+                cursor.execute("SELECT pdf_token FROM pedido LIMIT 1")
+            except sqlite3.OperationalError:
+                cursor.execute("ALTER TABLE pedido ADD COLUMN pdf_token TEXT")
             
             # Verificar si hay pedidos existentes
             cursor.execute("SELECT COUNT(*) as count FROM pedido")
@@ -1187,7 +1193,8 @@ def admin_importar_todo():
                 ('envio_cp', 'TEXT'),
                 ('envio_nombre_destinatario', 'TEXT'),
                 ('envio_dni_destinatario', 'TEXT'),
-                ('envio_referencias', 'TEXT')
+                ('envio_referencias', 'TEXT'),
+                ('pdf_token', 'TEXT')
             ]
             for columna, tipo in columnas_pedido:
                 try:
@@ -1227,8 +1234,8 @@ def admin_importar_todo():
                         cliente_email, cliente_direccion, metodo_entrega,
                         envio_direccion, envio_localidad, envio_provincia, envio_cp,
                         envio_nombre_destinatario, envio_dni_destinatario, envio_referencias,
-                        productos, total, estado
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        productos, total, estado, pdf_token
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     ped.get('id'),
                     ped.get('fecha'),
@@ -1247,7 +1254,8 @@ def admin_importar_todo():
                     ped.get('envio_referencias', ''),
                     ped.get('productos', '[]'),
                     ped.get('total', 0),
-                    ped.get('estado', 'pendiente')
+                    ped.get('estado', 'pendiente'),
+                    ped.get('pdf_token')
                 ))
 
             for pn in productos_nuevos:
@@ -1995,14 +2003,22 @@ def guardar_pedido():
                 cursor.execute("SELECT envio_dni_destinatario FROM pedido LIMIT 1")
             except sqlite3.OperationalError:
                 cursor.execute("ALTER TABLE pedido ADD COLUMN envio_dni_destinatario TEXT")
-            
+
+            try:
+                cursor.execute("SELECT pdf_token FROM pedido LIMIT 1")
+            except sqlite3.OperationalError:
+                cursor.execute("ALTER TABLE pedido ADD COLUMN pdf_token TEXT")
+
+            # Código secreto del link al PDF que va en el mensaje de WhatsApp
+            pdf_token = secrets.token_urlsafe(8)
+
             # Insertar pedido
             cursor.execute("""
                 INSERT INTO pedido (cliente_nombre, cliente_cuit, cliente_telefono, cliente_email, 
                                    cliente_direccion, metodo_entrega, envio_direccion, envio_localidad,
                                    envio_provincia, envio_cp, envio_nombre_destinatario, envio_dni_destinatario,
-                                   envio_referencias, productos, total)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                   envio_referencias, productos, total, pdf_token)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 data.get('nombre'),
                 data.get('cuit'),
@@ -2018,7 +2034,8 @@ def guardar_pedido():
                 data.get('envio_dni_destinatario') or data.get('envio_cuit_destinatario'),
                 data.get('envio_referencias'),
                 data.get('productos'),  # JSON string con los productos
-                data.get('total')
+                data.get('total'),
+                pdf_token
             ))
             
             pedido_id = cursor.lastrowid
@@ -2048,7 +2065,11 @@ def guardar_pedido():
                 datos_envio=datos_envio
             )
         
-        return jsonify({'success': True, 'pedido_id': pedido_id})
+        return jsonify({
+            'success': True,
+            'pedido_id': pedido_id,
+            'pdf_url': url_for('pedido_pdf_publico', pedido_id=pedido_id, token=pdf_token)
+        })
     
     except Exception as e:
         logger.error(f"Error al guardar pedido: {e}")
@@ -3575,6 +3596,26 @@ def admin_pedido_pdf(pedido_id):
         logger.error(f"Error al generar el PDF del pedido {pedido_id}: {e}")
         flash('Error al generar el PDF del pedido', 'error')
         return redirect(url_for('admin_pedidos'))
+
+
+@app.route("/pedido/<int:pedido_id>/<token>.pdf")
+def pedido_pdf_publico(pedido_id, token):
+    """El PDF del pedido para el link del mensaje de WhatsApp. Sin login: lo
+    protege el código secreto del link (los pedidos sin código no tienen link)."""
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM pedido WHERE id = ?", (pedido_id,))
+        row = cursor.fetchone()
+        if not row or not row['pdf_token'] or not secrets.compare_digest(row['pdf_token'], token):
+            return render_template("error.html", mensaje="No encontramos ese pedido."), 404
+        pedido = dict(row)
+        fotos = fotos_de_pedido(cursor, pedido)
+
+    return send_file(
+        BytesIO(generar_pdf_pedido(pedido, fotos)),
+        mimetype='application/pdf',
+        download_name=nombre_archivo_pedido(pedido)
+    )
 
 
 # =============================================================================

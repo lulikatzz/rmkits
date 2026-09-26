@@ -522,9 +522,9 @@ function validarFormulario() {
 // =============================================================================
 
 /**
- * Arma el mensaje para WhatsApp
+ * Arma el mensaje para WhatsApp. Si hay link al PDF del pedido, va al final.
  */
-function armarMensajeWhatsApp() {
+function armarMensajeWhatsApp(linkPdf) {
   const entrega = obtenerEntregaSeleccionada();
   const nombre = document.getElementById("contacto-nombre").value.trim();
   const telefono = document.getElementById("contacto-telefono").value.trim();
@@ -563,6 +563,12 @@ function armarMensajeWhatsApp() {
     lines.push(`- Nombre del destinatario: ${nombreDest}`);
     lines.push(`- DNI del destinatario: ${dniDest}`);
     if (ref) lines.push(`- Referencias: ${ref}`);
+  }
+
+  if (linkPdf) {
+    lines.push("");
+    lines.push("Pedido en PDF:");
+    lines.push(linkPdf);
   }
 
   return encodeURIComponent(lines.join("\n"));
@@ -638,9 +644,6 @@ document.addEventListener("DOMContentLoaded", () => {
       return false;
     }
 
-    const mensaje = armarMensajeWhatsApp();
-    const urlWhatsApp = `https://wa.me/${WHATSAPP_NUMERO}?text=${mensaje}`;
-
     const metodoEntrega = obtenerEntregaSeleccionada();
     const total = calcularTotal();
     const datosCliente = {
@@ -662,6 +665,7 @@ document.addEventListener("DOMContentLoaded", () => {
       datosCliente.envio_referencias = document.getElementById("envio-referencias")?.value.trim() || "";
     }
 
+    let linkPdf = "";
     try {
       const response = await fetch("/guardar-pedido", {
         method: "POST",
@@ -682,6 +686,9 @@ document.addEventListener("DOMContentLoaded", () => {
         alert("Hubo un error al registrar tu pedido. Por favor, intentá nuevamente.");
         return false;
       }
+      if (result.pdf_url) {
+        linkPdf = new URL(result.pdf_url, window.location.origin).href;
+      }
     } catch (err) {
       console.error("Error al guardar pedido:", err);
       alert("Hubo un error al registrar tu pedido. Por favor, intentá nuevamente.");
@@ -691,7 +698,8 @@ document.addEventListener("DOMContentLoaded", () => {
     // Navegar la pestaña actual a WhatsApp. No usamos window.open() porque
     // luego del await se pierde la activación del usuario y Android Chrome
     // bloquea los popups; la navegación de la pestaña actual siempre funciona.
-    window.location.href = urlWhatsApp;
+    const mensaje = armarMensajeWhatsApp(linkPdf);
+    window.location.href = `https://wa.me/${WHATSAPP_NUMERO}?text=${mensaje}`;
   });
 
   // Prevenir zoom con doble tap en móviles

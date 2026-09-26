@@ -84,7 +84,9 @@ All routes and logic live in `app.py` (~2600 lines). There are no blueprints, mo
 
 1. `static/js/carrito.js` validates the form and POSTs JSON to `/guardar-pedido`.
 2. `/guardar-pedido` saves the order and sends a confirmation email over SMTP. The email is skipped while `MAIL_USERNAME` is still the placeholder, and SMTP errors are logged, never raised.
-3. The page then goes to `https://wa.me/<number>?text=…` via `window.location.href`. This is intentional: `window.open` gets blocked by Android Chrome after an `await`.
+3. The page then goes to `https://wa.me/<number>?text=…` via `window.location.href`. This is intentional: `window.open` gets blocked by Android Chrome after an `await`. The message is built after the save, because its last line is the order's PDF link.
+
+The PDF is generated on every request and never stored. `generar_pdf_pedido()` builds it for both the admin button (`/admin/pedidos/<id>/pdf`) and the public link `/pedido/<id>/<pdf_token>.pdf`. `pdf_token` is a random column set by `/guardar-pedido`; orders without one (older, manual or Excel-imported) have no public link.
 
 The destination number is runtime config, not `config.py`. It lives in `<data>/whatsapp_config.json` (`{activo, numeros}`) and is edited from the admin dashboard. `leer_config_whatsapp()` reads it, and `carrito.html` injects it as `window.WHATSAPP_NUMERO`.
 
