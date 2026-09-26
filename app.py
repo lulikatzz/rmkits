@@ -3044,9 +3044,14 @@ def borrar_foto_mochila(nombre):
         logger.warning(f"No se pudo borrar la foto de mochila {nombre}: {e}")
 
 
+# Caracteres comunes que no son latin-1, cambiados por uno parecido en vez de '?'
+REEMPLAZOS_PDF = str.maketrans({'—': '-', '–': '-', '“': '"', '”': '"', '‘': "'", '’': "'", '…': '...'})
+
+
 def texto_pdf(texto):
     """Las fuentes estándar del PDF solo tienen caracteres latinos: el resto se cambia por '?'."""
-    return (texto or '').encode('latin-1', 'replace').decode('latin-1')
+    texto = (texto or '').translate(REEMPLAZOS_PDF)
+    return texto.encode('latin-1', 'replace').decode('latin-1')
 
 
 def dibujar_mochila_pdf(pdf, mochila, y):
@@ -3295,6 +3300,280 @@ def admin_mochila_eliminar(id):
         flash(f'Error al eliminar la mochila: {str(e)}', 'error')
 
     return redirect(url_for('admin_mochilas'))
+
+
+# =============================================================================
+# PDF DE UN PEDIDO
+# =============================================================================
+# Desde la lista de pedidos del admin: detalle con foto, cantidad, precio y
+# subtotal de cada producto, y el total. A4 vertical, medidas en mm.
+
+PEDIDO_PDF_MARGEN = 10
+PEDIDO_PDF_ALTO_FILA = 24
+PEDIDO_PDF_LADO_FOTO = 20
+# Foto, producto, cantidad, precio unitario, subtotal (suman 190 = A4 menos márgenes)
+PEDIDO_PDF_COLUMNAS = (24, 84, 20, 30, 32)
+PEDIDO_PDF_GRIS = (240, 240, 240)
+
+
+class PedidoPDF(FPDF):
+    def footer(self):
+        self.set_y(-12)
+        self.set_font('helvetica', '', 8)
+        self.set_text_color(130, 130, 130)
+        self.cell(0, 6, f'Página {self.page_no()}/{{nb}}', align='C')
+
+
+def miniatura_pdf(ruta):
+    """La foto achicada y en JPEG, para que el PDF no pese lo que pesan las fotos originales."""
+    with Image.open(ruta) as img:
+        img = img.convert('RGBA')
+        fondo = Image.new('RGB', img.size, (255, 255, 255))
+        fondo.paste(img, mask=img.split()[3])
+    fondo.thumbnail((240, 240))
+    salida = BytesIO()
+    fondo.save(salida, format='JPEG', quality=80)
+    salida.seek(0)
+    return salida, fondo.size
+
+
+def a_numero(valor):
+    try:
+        return float(valor or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def fecha_pedido_ar(pedido):
+    """'2026-09-27 01:30:00' (UTC, como lo guarda SQLite) -> '26-09-2026' en hora de Argentina."""
+    fecha = (pedido.get('fecha') or '').strip()
+    try:
+        utc = datetime.strptime(fecha[:19], '%Y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc)
+        return utc.astimezone(ZONA_HORARIA_LOCAL).strftime('%d-%m-%Y')
+    except ValueError:
+        pass
+    try:
+        return datetime.strptime(fecha[:10], '%Y-%m-%d').strftime('%d-%m-%Y')
+    except ValueError:
+        return fecha[:10]
+
+
+def nombre_archivo_pedido(pedido):
+    """Nombre del cliente + fecha, sin caracteres que no se permiten en archivos."""
+    cliente = re.sub(r'[\\/:*?"<>|]+', ' ', pedido.get('cliente_nombre') or '')
+    cliente = ' '.join(cliente.split())
+    partes = [p for p in (cliente or f"Pedido {pedido['id']}", fecha_pedido_ar(pedido)) if p]
+    return ' '.join(partes) + '.pdf'
+
+
+def dibujar_encabezado_tabla_pedido(pdf):
+    pdf.set_font('helvetica', 'B', 9)
+    pdf.set_fill_color(*PDF_VERDE)
+    pdf.set_text_color(20, 20, 20)
+    titulos = ('Foto', 'Producto', 'Cant.', 'Precio unit.', 'Subtotal')
+    alineaciones = ('C', 'L', 'C', 'R', 'R')
+    for ancho, titulo, alineacion in zip(PEDIDO_PDF_COLUMNAS, titulos, alineaciones):
+        pdf.cell(ancho, 8, titulo, align=alineacion, fill=True)
+    pdf.ln(8)
+
+
+def dibujar_fila_pedido(pdf, item, ruta_foto, par):
+    x, y = pdf.l_margin, pdf.get_y()
+    alto = PEDIDO_PDF_ALTO_FILA
+    if par:
+        pdf.set_fill_color(*PEDIDO_PDF_GRIS)
+        pdf.rect(x, y, sum(PEDIDO_PDF_COLUMNAS), alto, style='F')
+
+    # Foto centrada en su columna
+    ancho_foto = PEDIDO_PDF_COLUMNAS[0]
+    lado = PEDIDO_PDF_LADO_FOTO
+    foto_puesta = False
+    if ruta_foto:
+        try:
+            imagen, (w_px, h_px) = miniatura_pdf(ruta_foto)
+            escala = lado / max(w_px, h_px)
+            w_mm, h_mm = w_px * escala, h_px * escala
+            pdf.image(imagen, x=x + (ancho_foto - w_mm) / 2, y=y + (alto - h_mm) / 2, w=w_mm, h=h_mm)
+            foto_puesta = True
+        except Exception as e:
+            logger.warning(f"No se pudo poner la foto {ruta_foto} en el PDF del pedido: {e}")
+    if not foto_puesta:
+        pdf.set_draw_color(200, 200, 200)
+        pdf.rect(x + (ancho_foto - lado) / 2, y + (alto - lado) / 2, lado, lado)
+        pdf.set_font('helvetica', '', 7)
+        pdf.set_text_color(150, 150, 150)
+        pdf.set_xy(x, y)
+        pdf.cell(ancho_foto, alto, 'Sin foto', align='C')
+
+    # Código arriba y título abajo, hasta 3 renglones
+    ancho_producto = PEDIDO_PDF_COLUMNAS[1] - 2
+    pdf.set_font('helvetica', '', 9)
+    renglones = pdf.multi_cell(ancho_producto, 4.5, texto_pdf(item.get('titulo')),
+                               dry_run=True, output='LINES')
+    if len(renglones) > 3:
+        renglones = renglones[:3]
+        renglones[2] = renglones[2][:-3].rstrip() + '...'
+    alto_texto = 4.5 * (len(renglones) + 1)
+    y_texto = y + (alto - alto_texto) / 2
+    x_producto = x + ancho_foto + 1
+    pdf.set_xy(x_producto, y_texto)
+    pdf.set_font('helvetica', 'B', 8)
+    pdf.set_text_color(110, 110, 110)
+    pdf.cell(ancho_producto, 4.5, texto_pdf(item.get('codigo')))
+    pdf.set_font('helvetica', '', 9)
+    pdf.set_text_color(20, 20, 20)
+    for i, renglon in enumerate(renglones, start=1):
+        pdf.set_xy(x_producto, y_texto + 4.5 * i)
+        pdf.cell(ancho_producto, 4.5, renglon)
+
+    cantidad = a_numero(item.get('cantidad'))
+    precio = a_numero(item.get('precio'))
+    valores = (
+        (f'{cantidad:g}', 'C', ''),
+        (formato_precio_ar(round(precio)), 'R', ''),
+        (formato_precio_ar(round(precio * cantidad)), 'R', 'B'),
+    )
+    pdf.set_xy(x + ancho_foto + PEDIDO_PDF_COLUMNAS[1], y)
+    for ancho, (texto, alineacion, estilo) in zip(PEDIDO_PDF_COLUMNAS[2:], valores):
+        pdf.set_font('helvetica', estilo, 10)
+        pdf.cell(ancho, alto, texto, align=alineacion)
+    pdf.set_xy(x, y + alto)
+
+
+def generar_pdf_pedido(pedido, fotos):
+    """PDF de un pedido. `fotos` es {codigo: ruta de la foto}. Devuelve los bytes del archivo."""
+    pdf = PedidoPDF(format='A4')
+    pdf.set_margins(PEDIDO_PDF_MARGEN, PEDIDO_PDF_MARGEN)
+    pdf.set_auto_page_break(False)
+    pdf.set_title(f"Pedido #{pedido['id']}")
+    pdf.add_page()
+
+    # Encabezado: logo a la izquierda, número y fecha a la derecha
+    logo = os.path.join(app.root_path, 'static', 'img', 'logo.PNG')
+    if os.path.isfile(logo):
+        try:
+            imagen, _ = miniatura_pdf(logo)
+            pdf.image(imagen, x=PEDIDO_PDF_MARGEN, y=PEDIDO_PDF_MARGEN, h=18)
+        except Exception as e:
+            logger.warning(f"No se pudo poner el logo en el PDF del pedido: {e}")
+    pdf.set_xy(PEDIDO_PDF_MARGEN, PEDIDO_PDF_MARGEN + 2)
+    pdf.set_font('helvetica', 'B', 18)
+    pdf.set_text_color(20, 20, 20)
+    pdf.cell(0, 8, f"Pedido #{pedido['id']}", align='R')
+    pdf.set_xy(PEDIDO_PDF_MARGEN, PEDIDO_PDF_MARGEN + 10)
+    pdf.set_font('helvetica', '', 10)
+    pdf.set_text_color(90, 90, 90)
+    pdf.cell(0, 6, f"Fecha: {fecha_pedido_ar(pedido)}", align='R')
+
+    # Datos del cliente
+    pdf.set_y(PEDIDO_PDF_MARGEN + 24)
+    entrega = (pedido.get('metodo_entrega') or '').strip().lower()
+    if entrega == 'envio':
+        destino = ', '.join(p for p in (pedido.get('envio_direccion'), pedido.get('envio_localidad'),
+                                        pedido.get('envio_provincia')) if p)
+        if pedido.get('envio_cp'):
+            destino += f" (CP {pedido['envio_cp']})"
+        entrega = f"Envío a {destino}" if destino else 'Envío'
+    elif entrega == 'retiro':
+        entrega = 'Retiro en local'
+    datos = (
+        ('Cliente', pedido.get('cliente_nombre')),
+        ('Teléfono', pedido.get('cliente_telefono')),
+        ('CUIT', pedido.get('cliente_cuit')),
+        ('Email', pedido.get('cliente_email')),
+        ('Entrega', entrega),
+    )
+    for etiqueta, valor in datos:
+        if not valor:
+            continue
+        pdf.set_font('helvetica', 'B', 10)
+        pdf.set_text_color(20, 20, 20)
+        pdf.cell(22, 6, f'{etiqueta}:')
+        pdf.set_font('helvetica', '', 10)
+        pdf.multi_cell(0, 6, texto_pdf(str(valor)), new_x='LMARGIN', new_y='NEXT')
+    pdf.ln(4)
+
+    # Productos
+    try:
+        items = json.loads(pedido.get('productos') or '[]')
+    except (TypeError, ValueError):
+        items = []
+    dibujar_encabezado_tabla_pedido(pdf)
+    limite = pdf.h - 18
+    for i, item in enumerate(items):
+        if pdf.get_y() + PEDIDO_PDF_ALTO_FILA > limite:
+            pdf.add_page()
+            dibujar_encabezado_tabla_pedido(pdf)
+        dibujar_fila_pedido(pdf, item, fotos.get(item.get('codigo')), i % 2 == 1)
+
+    # Total
+    if pdf.get_y() + 14 > limite:
+        pdf.add_page()
+    pdf.ln(2)
+    unidades = sum(a_numero(item.get('cantidad')) for item in items)
+    pdf.set_font('helvetica', '', 10)
+    pdf.set_text_color(90, 90, 90)
+    pdf.cell(100, 10, f"{len(items)} productos, {unidades:g} unidades")
+    pdf.set_fill_color(*PDF_VERDE)
+    pdf.set_text_color(20, 20, 20)
+    pdf.set_font('helvetica', 'B', 13)
+    pdf.cell(0, 10, f"TOTAL  {formato_precio_ar(round(a_numero(pedido.get('total'))))}  ",
+             align='R', fill=True)
+
+    return bytes(pdf.output())
+
+
+def fotos_de_pedido(cursor, pedido):
+    """{codigo: ruta} con la foto actual de cada producto del pedido (o la que quedó guardada en el pedido)."""
+    try:
+        items = json.loads(pedido.get('productos') or '[]')
+    except (TypeError, ValueError):
+        return {}
+    codigos = [item.get('codigo') for item in items if item.get('codigo')]
+    actuales = {}
+    if codigos:
+        marcas = ','.join('?' * len(codigos))
+        cursor.execute(f"SELECT codigo, imagen FROM producto WHERE codigo IN ({marcas})", codigos)
+        actuales = {row['codigo']: row['imagen'] for row in cursor.fetchall()}
+
+    fotos = {}
+    for item in items:
+        codigo = item.get('codigo')
+        for imagen in (actuales.get(codigo), item.get('imagen')):
+            if not imagen:
+                continue
+            ruta = os.path.join(Config.UPLOAD_FOLDER, os.path.basename(str(imagen)))
+            if os.path.isfile(ruta):
+                fotos[codigo] = ruta
+                break
+    return fotos
+
+
+@app.route("/admin/pedidos/<int:pedido_id>/pdf")
+@login_required
+def admin_pedido_pdf(pedido_id):
+    """Descargar un pedido en PDF, con el nombre del cliente y la fecha"""
+    try:
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM pedido WHERE id = ?", (pedido_id,))
+            row = cursor.fetchone()
+            if not row:
+                flash(f'No existe el pedido #{pedido_id}', 'error')
+                return redirect(url_for('admin_pedidos'))
+            pedido = dict(row)
+            fotos = fotos_de_pedido(cursor, pedido)
+
+        return send_file(
+            BytesIO(generar_pdf_pedido(pedido, fotos)),
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=nombre_archivo_pedido(pedido)
+        )
+    except Exception as e:
+        logger.error(f"Error al generar el PDF del pedido {pedido_id}: {e}")
+        flash('Error al generar el PDF del pedido', 'error')
+        return redirect(url_for('admin_pedidos'))
 
 
 # =============================================================================

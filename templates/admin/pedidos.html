@@ -135,6 +135,9 @@
               <button onclick="cambiarEstado({{ pedido.id }}, '{{ pedido.estado }}')" class="btn btn-sm btn-success" title="Cambiar estado">
                 ✓
               </button>
+              <a href="{{ url_for('admin_pedido_pdf', pedido_id=pedido.id) }}" class="btn btn-sm btn-pdf" title="Descargar PDF">
+                📄
+              </a>
               <button onclick="eliminarPedido({{ pedido.id }})" class="btn btn-sm btn-danger" title="Eliminar">
                 🗑️
               </button>
@@ -194,6 +197,9 @@
         <button onclick="cambiarEstado({{ pedido.id }}, '{{ pedido.estado }}')" class="btn-action btn-success">
           ✓ Estado
         </button>
+        <a href="{{ url_for('admin_pedido_pdf', pedido_id=pedido.id) }}" class="btn-action btn-pdf">
+          📄 PDF
+        </a>
         <button onclick="eliminarPedido({{ pedido.id }})" class="btn-action btn-danger">
           🗑️ Eliminar
         </button>
@@ -855,7 +861,7 @@ document.addEventListener('keydown', function(e) {
 
 .card-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: repeat(4, 1fr);
   gap: 0;
   border-top: 1px solid #e0e0e0;
 }
@@ -889,6 +895,12 @@ document.addEventListener('keydown', function(e) {
 
 .btn-action.btn-danger {
   color: #dc3545;
+}
+
+.btn-action.btn-pdf {
+  color: #6f42c1;
+  text-align: center;
+  text-decoration: none;
 }
 
 /* Badges */
@@ -1269,6 +1281,14 @@ document.addEventListener('keydown', function(e) {
   .btn-info {
     background: #17a2b8;
     color: white;
+  }
+
+  .btn-pdf {
+    background: #6f42c1;
+    color: white;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
   }
   
 .btn-whatsapp {
