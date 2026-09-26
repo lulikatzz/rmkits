@@ -3515,7 +3515,6 @@ def generar_pdf_pedido(pedido, fotos):
     if pdf.get_y() + 14 > limite:
         pdf.add_page()
     pdf.ln(2)
-    pdf.set_x(pdf.l_margin + 100)
     pdf.set_fill_color(*PEDIDO_PDF_VIOLETA)
     pdf.set_text_color(255, 255, 255)
     pdf.set_font('helvetica', 'B', 13)
