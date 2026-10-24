@@ -194,12 +194,22 @@ def before_request():
         return redirect(url, code=301)
 
 
+# Los productos de una categoría desactivada no se muestran en la tienda.
+# Los que no tienen categoría (o tienen una que no está en la tabla) se muestran igual.
+FILTRO_CATEGORIA_ACTIVA = """
+    NOT EXISTS (
+        SELECT 1 FROM categoria c
+        WHERE c.nombre = producto.categoria AND c.activa = 0
+    )
+"""
+
+
 def get_productos():
     """Obtiene todos los productos activos de la base de datos"""
     try:
         with get_db_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM producto WHERE stock > 0 AND activo = 1 ORDER BY codigo ASC")
+            cursor.execute(f"SELECT * FROM producto WHERE stock > 0 AND activo = 1 AND {FILTRO_CATEGORIA_ACTIVA} ORDER BY codigo ASC")
             filas = cursor.fetchall()
             productos = [dict(fila) for fila in filas]
             return productos
@@ -221,11 +231,11 @@ def index():
         try:
             with get_db_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute("SELECT * FROM categoria ORDER BY nombre")
+                cursor.execute("SELECT * FROM categoria WHERE activa = 1 ORDER BY nombre")
                 categorias = [dict(row) for row in cursor.fetchall()]
         except Exception as e:
             logger.error(f"Error al obtener categorías: {e}")
-        
+
         return render_template(
             "index.html",
             productos=productos,
@@ -250,7 +260,7 @@ def carrito_view():
         try:
             with get_db_connection() as conn:
                 cursor = conn.cursor()
-                cursor.execute("SELECT id, codigo, precio, stock, minimo, multiplo, imagen FROM producto WHERE activo = 1 ORDER BY codigo DESC")
+                cursor.execute(f"SELECT id, codigo, precio, stock, minimo, multiplo, imagen FROM producto WHERE activo = 1 AND {FILTRO_CATEGORIA_ACTIVA} ORDER BY codigo DESC")
                 for row in cursor.fetchall():
                     productos_actualizados[row['codigo']] = {
                         'id': row['id'],
@@ -585,10 +595,17 @@ def init_database():
                 CREATE TABLE IF NOT EXISTS categoria (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     nombre TEXT NOT NULL UNIQUE,
-                    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    activa INTEGER NOT NULL DEFAULT 1
                 )
             """)
-            
+
+            # Las categorías que ya existían quedan activas
+            try:
+                cursor.execute("SELECT activa FROM categoria LIMIT 1")
+            except sqlite3.OperationalError:
+                cursor.execute("ALTER TABLE categoria ADD COLUMN activa INTEGER NOT NULL DEFAULT 1")
+
             # Crear tabla productos_nuevos si no existe
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS producto_nuevo (
@@ -2443,6 +2460,25 @@ def admin_categoria_editar(id):
         flash(f'Error al editar categoría: {str(e)}', 'error')
     
     return redirect(url_for('admin_categorias'))
+
+
+@app.route("/admin/categoria/<int:id>/activa", methods=["POST"])
+@login_required
+def admin_categoria_activa(id):
+    """Activar/desactivar una categoría vía AJAX (desactivada = ni ella ni sus productos aparecen en la tienda)"""
+    try:
+        data = request.get_json(silent=True) or {}
+        activa = 1 if data.get('activa') else 0
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE categoria SET activa = ? WHERE id = ?", (activa, id))
+            conn.commit()
+            if cursor.rowcount == 0:
+                return jsonify({'success': False, 'error': 'Categoría no encontrada'}), 404
+        return jsonify({'success': True, 'activa': bool(activa)})
+    except Exception as e:
+        logger.error(f"Error al activar/desactivar categoría: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route("/admin/categoria/<int:id>/eliminar", methods=["POST"])

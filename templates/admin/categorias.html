@@ -15,9 +15,15 @@
     <h3>📁 Lista de Categorías</h3>
     <p class="text-muted">Gestiona las categorías de tus productos</p>
   </div>
-  
+
   <div class="card-body">
     {% if categorias %}
+    <div class="resumen-categorias">
+      <strong>{{ categorias|length }}</strong> categorías en total ·
+      <strong id="contadorActivas">{{ categorias|selectattr('activa')|list|length }}</strong> activas.
+      Las desactivadas no aparecen en la tienda, y sus productos tampoco.
+    </div>
+
     <div class="table-responsive">
       <table class="table">
         <thead>
@@ -26,18 +32,28 @@
             <th>Nombre</th>
             <th>Productos</th>
             <th>Fecha Creación</th>
+            <th>Estado</th>
             <th>Acciones</th>
           </tr>
         </thead>
         <tbody>
           {% for categoria in categorias %}
-          <tr>
+          <tr class="{{ '' if categoria.activa else 'apagada' }}">
             <td>{{ categoria.id }}</td>
             <td><strong>{{ categoria.nombre }}</strong></td>
             <td>
               <span class="badge badge-info">{{ categoria.num_productos }} producto(s)</span>
             </td>
             <td>{{ categoria.fecha_creacion }}</td>
+            <td>
+              <label class="check-estado">
+                <input type="checkbox" {{ 'checked' if categoria.activa }}
+                       data-url="{{ url_for('admin_categoria_activa', id=categoria.id) }}"
+                       data-nombre="{{ categoria.nombre }}"
+                       data-productos="{{ categoria.num_productos }}">
+                <span>{{ 'Activa' if categoria.activa else 'Desactivada' }}</span>
+              </label>
+            </td>
             <td>
               <button class="btn btn-sm btn-secondary" onclick="mostrarModalEditarCategoria({{ categoria.id }}, '{{ categoria.nombre }}')">
                 ✏️ Editar
@@ -123,7 +139,7 @@
             <select id="categoriaDestino" name="categoria_destino" class="form-control">
               <option value="">-- Selecciona una categoría --</option>
               {% for cat in categorias %}
-              <option value="{{ cat.nombre }}">{{ cat.nombre }}</option>
+              <option value="{{ cat.nombre }}">{{ cat.nombre }}{{ '' if cat.activa else ' (desactivada)' }}</option>
               {% endfor %}
             </select>
           </div>
@@ -289,6 +305,37 @@
   .table tbody tr:hover {
     background-color: #f9f9f9;
   }
+
+  .resumen-categorias {
+    background: #f8f9fa;
+    padding: 8px 12px;
+    border-radius: 6px;
+    margin-bottom: 14px;
+    font-size: 13px;
+    color: #495057;
+  }
+
+  /* Desactivadas: se ven apagadas, salvo el estado y los botones */
+  .table tr.apagada td { opacity: .45; }
+  .table tr.apagada td:nth-last-child(-n+2) { opacity: 1; }
+
+  .check-estado {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-weight: 700;
+    font-size: 12px;
+    color: #444;
+    white-space: nowrap;
+  }
+
+  .check-estado input {
+    width: 20px;
+    height: 20px;
+    accent-color: #6a1b9a;
+    cursor: pointer;
+  }
 </style>
 
 <script>
@@ -338,7 +385,47 @@
   function cerrarModal(idModal) {
     document.getElementById(idModal).style.display = 'none';
   }
-  
+
+  // Activar/desactivar sin recargar la página
+  document.querySelectorAll('.check-estado input').forEach(check => {
+    check.addEventListener('change', async () => {
+      const productos = Number(check.dataset.productos);
+      if (!check.checked && productos > 0 &&
+          !confirm(`Se van a ocultar de la tienda los ${productos} producto(s) de "${check.dataset.nombre}". ¿Desactivarla?`)) {
+        check.checked = true;
+        return;
+      }
+
+      check.disabled = true;
+      try {
+        const respuesta = await fetch(check.dataset.url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ activa: check.checked })
+        });
+        const data = await respuesta.json();
+        if (!respuesta.ok || !data.success) throw new Error(data.error || respuesta.status);
+
+        check.closest('tr').classList.toggle('apagada', !check.checked);
+        check.nextElementSibling.textContent = check.checked ? 'Activa' : 'Desactivada';
+        const contador = document.getElementById('contadorActivas');
+        contador.textContent = Number(contador.textContent) + (check.checked ? 1 : -1);
+
+        // Mantener al día el aviso en el selector de destino del modal de eliminar
+        Array.from(document.getElementById('categoriaDestino').options).forEach(option => {
+          if (option.value === check.dataset.nombre) {
+            option.textContent = check.dataset.nombre + (check.checked ? '' : ' (desactivada)');
+          }
+        });
+      } catch (e) {
+        check.checked = !check.checked;
+        alert('No se pudo cambiar el estado. Probá de nuevo.');
+      } finally {
+        check.disabled = false;
+      }
+    });
+  });
+
   // Cerrar modales al hacer clic fuera de ellos
   window.onclick = function(event) {
     if (event.target.classList.contains('modal')) {

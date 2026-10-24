@@ -48,7 +48,7 @@
           <select id="categoria" name="categoria">
             <option value="">Sin categoría</option>
             {% for cat in categorias %}
-            <option value="{{ cat.nombre }}" {% if producto and producto.categoria == cat.nombre %}selected{% endif %}>{{ cat.nombre }}</option>
+            <option value="{{ cat.nombre }}" {% if producto and producto.categoria == cat.nombre %}selected{% endif %}>{{ cat.nombre }}{{ '' if cat.activa else ' (desactivada)' }}</option>
             {% endfor %}
           </select>
         </div>
